@@ -9,6 +9,7 @@ interface PoolData {
   project?: string;
   yield: number;
   tvlUsd: number;
+  apyBase?: number;
   tokenData?: {
     logoURI?: string;
     symbol?: string;
@@ -67,7 +68,9 @@ function PoolDetailsCard<T extends PoolData>({
       <div className="items-end gap-1 relative hidden md:flex">
         <p className="text-2xl font-semibold text-green-600">{pool.yield.toFixed(2)}%</p>
         <div className="flex items-center gap-1 -top-[3px] relative">
-          <p className="text-gray-600 dark:text-gray-400 relative text-xs">APY</p>
+          <p className="text-gray-600 dark:text-gray-400 relative text-xs">
+            APY{pool.apyBase !== undefined && pool.apyBase !== pool.yield ? ' (base)' : ''}
+          </p>
           <VarApyTooltip size="xs" />
         </div>
       </div>
@@ -91,7 +94,9 @@ function PoolDetailsCard<T extends PoolData>({
         <div className="flex items-end gap-1 relative">
           <p className="text-2xl font-semibold text-green-600">{pool.yield.toFixed(2)}%</p>
           <div className="flex items-center gap-1 -top-[3px] relative">
-            <p className="text-gray-600 dark:text-gray-400 relative text-xs">APY</p>
+            <p className="text-gray-600 dark:text-gray-400 relative text-xs">
+              APY{pool.apyBase !== undefined && pool.apyBase !== pool.yield ? ' (base)' : ''}
+            </p>
             <VarApyTooltip size="xs" />
           </div>
         </div>

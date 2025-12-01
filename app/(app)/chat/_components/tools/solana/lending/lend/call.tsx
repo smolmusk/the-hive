@@ -165,6 +165,7 @@ const LendCallBody: React.FC<Props> = ({ toolCallId, args }) => {
           tokenSymbol: args.tokenSymbol, // Use args.tokenSymbol (reliable)
           amount: Number(amount),
           protocol: protocolName,
+          protocolAddress: args.protocolAddress,
         }),
       });
 

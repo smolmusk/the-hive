@@ -1,4 +1,5 @@
 import { StakingRewardsResponse } from '../staking-rewards/types';
+import { getLoopscaleVaults } from './get-loopscale-vaults';
 
 export const getBestLendingYields = async (): Promise<StakingRewardsResponse> => {
   try {
@@ -14,7 +15,9 @@ export const getBestLendingYields = async (): Promise<StakingRewardsResponse> =>
     }
 
     const data = await response.json();
-    return data;
+    // Append Loopscale vaults (if configured) under .loopscale property for downstream consumers
+    const loopscaleVaults = await getLoopscaleVaults();
+    return { ...data, loopscale: loopscaleVaults };
   } catch (error) {
     console.error('Error fetching lending yields data:', error);
     throw error;

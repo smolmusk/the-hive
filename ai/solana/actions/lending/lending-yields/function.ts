@@ -1,15 +1,17 @@
 import type { SolanaActionResult } from '@/ai/solana/actions/solana-action';
 import { getBestLendingYields } from '@/services/lending/get-best-lending-yields';
 import { getKaminoPools } from '@/services/lending/get-kamino-pools';
+import { getLoopscaleVaults } from '@/services/lending/get-loopscale-vaults';
 import { getTokenBySymbol } from '@/db/services/tokens';
 import { LendingYieldsResultBodyType } from './schema';
 
 export async function getLendingYields(): Promise<SolanaActionResult<LendingYieldsResultBodyType>> {
   try {
     // Fetch from both DefiLlama and Kamino SDK
-    const [defiLlamaResponse, kaminoPools] = await Promise.all([
+    const [defiLlamaResponse, kaminoPools, loopscaleVaults] = await Promise.all([
       getBestLendingYields(),
       getKaminoPools(),
+      getLoopscaleVaults(),
     ]);
 
     // Filter for Solana chains first
@@ -92,6 +94,14 @@ export async function getLendingYields(): Promise<SolanaActionResult<LendingYiel
       }
     }
 
+    for (const pool of loopscaleVaults || []) {
+      const mintAddress = pool.tokenMintAddress;
+      if (!mintAddress) continue;
+      if (!poolsByMint.has(mintAddress)) {
+        poolsByMint.set(mintAddress, pool);
+      }
+    }
+
     const solLendingPools = Array.from(poolsByMint.values());
 
     if (solLendingPools.length === 0) {
@@ -100,10 +110,18 @@ export async function getLendingYields(): Promise<SolanaActionResult<LendingYiel
       };
     }
 
-    // Sort by APY (highest first) and take top 3
-    let topSolanaPools = solLendingPools.sort((a: any, b: any) => (b.apy || 0) - (a.apy || 0));
+    // Sort by APY (highest first)
+    const sortedPools = solLendingPools.sort((a: any, b: any) => (b.apy || 0) - (a.apy || 0));
 
-    topSolanaPools = topSolanaPools.slice(0, 3);
+    // Ensure at least one Loopscale pool is shown if available
+    const loopscalePool = sortedPools.find((p) => p.project === 'loopscale');
+    let topSolanaPools = sortedPools.slice(0, 3);
+    if (loopscalePool && !topSolanaPools.some((p) => p.project === 'loopscale')) {
+      // Replace the lowest of the top 3 with the best Loopscale pool
+      topSolanaPools[2] = loopscalePool;
+      topSolanaPools = topSolanaPools.sort((a: any, b: any) => (b.apy || 0) - (a.apy || 0));
+    }
+
     // Reorder so highest APY is in the center (index 1)
     if (topSolanaPools.length === 3) {
       const [highest, second, third] = topSolanaPools;

@@ -1,0 +1,1382 @@
+https://docs.loopscale.com/api-reference/data/markets/get-quotes
+Get quotes
+Returns a list of current lend orders available for the specified principal token, collateral, and target duration. Results are sorted by APY and support pagination.
+POST
+/markets/quote
+curl --request POST \
+  --url https://tars.loopscale.com/v1/markets/quote \
+  --header 'Content-Type: application/json' \
+  --header 'user-wallet: <user-wallet>' \
+  --data '{
+  "durationType": 123,
+  "duration": 123,
+  "principal": "<string>",
+  "limit": 123,
+  "offset": 123,
+  "collateral": [
+    "<string>"
+  ],
+  "minPrincipalAmount": 123
+}'
+[
+  {
+    "apy": 123,
+    "ltv": 123,
+    "liquidationThreshold": 123,
+    "maxPrincipalAvailable": 123,
+    "sumPrincipalAvailable": 123
+  }
+]
+
+Headers
+​
+user-wallet
+stringrequired
+Wallet address of the requesting user
+
+Body
+application/json
+​
+durationType
+numberrequired
+Duration type enum (0 = days, 1 = weeks, 2 = months, 3 = minutes, 4 = years)
+
+​
+duration
+numberrequired
+Number of units of the specified durationType
+
+​
+principal
+stringrequired
+Token mint address of the principal
+
+​
+limit
+integerrequired
+Pagination limit (max 1000)
+
+​
+offset
+integerrequired
+Pagination offset, sorted by APY
+
+​
+collateral
+string[]required
+List of collateral asset identifiers
+
+​
+minPrincipalAmount
+integer
+Optional minimum principal amount in lamports to filter offers
+
+Response
+
+200
+
+application/json
+List of available quotes
+
+​
+apy
+number
+APY in cBPS (e.g., 10% = 100000)
+
+​
+ltv
+number
+Loan-to-value ratio in cBPS
+
+​
+liquidationThreshold
+number
+Liquidation threshold in cBPS
+
+​
+maxPrincipalAvailable
+number
+Maximum principal available in lamports
+
+​
+sumPrincipalAvailable
+number
+Total principal available in lamports for the given quote parameters
+
+
+https://docs.loopscale.com/api-reference/data/markets/get-best-quote
+Get max quote
+Returns the top quote for each specified collateral asset based on available liquidity. This endpoint is designed for minimizing rate slippage for a borrow with known inputs.
+POST
+/markets/quote/max
+
+curl --request POST \
+  --url https://tars.loopscale.com/v1/markets/quote/max \
+  --header 'Content-Type: application/json' \
+  --header 'user-wallet: <user-wallet>' \
+  --data '{
+  "durationType": 123,
+  "duration": 123,
+  "principalMint": "<string>",
+  "collateralFilter": [
+    {
+      "amount": 123,
+      "assetData": {
+        "Spl": {
+          "mint": "<string>"
+        }
+      }
+    }
+  ]
+}'
+
+[
+  {
+    "apy": 100000,
+    "strategy": "9rQ8Q4tMUDhT",
+    "collateralIdentifier": "So11111111111111111111111111111111111111112",
+    "ltv": 600000,
+    "lqt": 800000,
+    "amount": 12000000000
+  }
+]
+
+Headers
+​
+user-wallet
+stringrequired
+Wallet address of the requesting user
+
+Body
+application/json
+​
+durationType
+numberrequired
+Duration type enum (0 = days, 1 = weeks, 2 = months, 3 = minutes, 4 = years)
+
+​
+duration
+numberrequired
+Number of units of the specified durationType
+
+​
+principalMint
+stringrequired
+Token mint address of the principal
+
+​
+collateralFilter
+object[]required
+Mapping from collateral mint to detailed collateral metadata
+
+amount
+numberrequired
+Collateral amount in lamports
+​
+assetData
+objectrequired
+​
+assetData.Spl
+objectrequired
+Show child attributes
+
+Response
+
+200
+
+application/json
+Best matching quote per collateral asset
+
+Array of quotes with collateral and strategies
+
+​
+apy
+number
+Annualized interest rate in 1/100th of a basis point
+
+​
+strategy
+string
+Lender who is offering the quote
+
+​
+collateralIdentifier
+string
+Collateral mint pubkey
+
+​
+ltv
+number
+Maximum initial loan to value in 1/100th of a basis point
+
+​
+lqt
+number
+Liquidation loan to value in 1/100th of a basis point
+
+​
+amount
+number
+Maximum amount that can be borrowed, in lamports
+
+https://docs.loopscale.com/api-reference/data/positions/get-loan-info
+Positions
+Get loan info
+Returns a list of loans filtered by request. Results support pagination.
+POST
+/markets/loans/info
+
+curl --request POST \
+  --url https://tars.loopscale.com/v1/markets/loans/info \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "loanAddresses": [
+    "<string>"
+  ],
+  "lenders": [
+    "<string>"
+  ],
+  "borrowers": [
+    "<string>"
+  ],
+  "filterType": 123,
+  "principalMints": [
+    "<string>"
+  ],
+  "orderFundingType": 123,
+  "page": 123,
+  "pageSize": 123,
+  "sortDirection": 123,
+  "sortType": 123,
+  "collateralMints": [
+    "<string>"
+  ],
+  "excludeCollateralIdentifiers": [
+    "<string>"
+  ],
+  "excludePrincipalMints": [
+    "<string>"
+  ],
+  "assetTypes": 123
+}'
+
+[
+  {
+    "totalCount": 123,
+    "loanInfos": [
+      {
+        "loan": {
+          "id": 123,
+          "address": "<string>",
+          "bump": 123,
+          "loanStatus": 123,
+          "nonce": 123,
+          "borrower": "<string>",
+          "startTime": 123,
+          "closed": "<any>",
+          "lastInteractedTime": 123,
+          "lastInteractedTxn": "<string>",
+          "writeVersion": 123
+        },
+        "loanType": 123,
+        "ledgers": [
+          {
+            "id": 123,
+            "ledgerIndex": 123,
+            "loan": "<string>",
+            "status": 123,
+            "strategy": "<string>",
+            "principalMint": "<string>",
+            "marketInformation": "<string>",
+            "apy": 123,
+            "principalDue": 123,
+            "principalRepaid": 123,
+            "interestPerSecond": 123,
+            "lastInterestUpdateTime": 123,
+            "interestOutstanding": 123,
+            "durationType": 123,
+            "duration": 123,
+            "startTime": 123,
+            "endTime": 123,
+            "weights": [
+              123
+            ],
+            "ltvRatios": [
+              123
+            ],
+            "lqtRatios": [
+              123
+            ],
+            "lastInteractedTime": 123,
+            "lastInteractedTxn": "<string>",
+            "writeVersion": 123
+          }
+        ],
+        "pastLedgers": [
+          {
+            "id": 123,
+            "ledgerIndex": 123,
+            "loan": "<string>",
+            "status": 123,
+            "strategy": "<string>",
+            "principalMint": "<string>",
+            "marketInformation": "<string>",
+            "apy": 123,
+            "principalDue": 123,
+            "principalRepaid": 123,
+            "interestPerSecond": 123,
+            "lastInterestUpdateTime": 123,
+            "interestOutstanding": 123,
+            "durationType": 123,
+            "duration": 123,
+            "startTime": 123,
+            "endTime": 123,
+            "weights": [
+              123
+            ],
+            "ltvRatios": [
+              123
+            ],
+            "lqtRatios": [
+              123
+            ],
+            "lastInteractedTime": 123,
+            "lastInteractedTxn": "<string>",
+            "writeVersion": 123
+          }
+        ],
+        "collateral": [
+          {
+            "id": 123,
+            "loan": "<string>",
+            "index": 123,
+            "assetType": 123,
+            "assetIdentifier": "<string>",
+            "assetMint": "<string>",
+            "amount": 123,
+            "lastInteractedTime": 123,
+            "lastInteractedTxn": "<string>",
+            "writeVersion": 123
+          }
+        ],
+        "events": [
+          {
+            "id": 123,
+            "loan": "<string>",
+            "assetIdentifier": "<string>",
+            "assetMint": "<string>",
+            "amount": 123,
+            "originalLender": "<string>",
+            "newLender": "<string>",
+            "action": 123,
+            "actionMetadata": {},
+            "eventTime": 123,
+            "usdPrice": 123,
+            "eventTxn": "<string>"
+          }
+        ],
+        "matrixUpdates": [
+          {
+            "id": 123,
+            "loan": "<string>",
+            "ledgerIndex": 123,
+            "weights": [
+              123
+            ],
+            "ltvRatios": [
+              123
+            ],
+            "lqtRatios": [
+              123
+            ],
+            "timestamp": 123,
+            "txnSignature": "<string>",
+            "writeVersion": 123
+          }
+        ],
+        "collateralYield": [
+          {
+            "id": 123,
+            "collateralMint": "<string>",
+            "collateralApy": 123,
+            "collateralTimestamp": 123
+          }
+        ]
+      }
+    ]
+  }
+]
+
+Response
+
+200
+
+application/json
+List of loan data
+
+​
+totalCount
+number
+Number of loans contained in query
+
+​
+loanInfos
+object[]
+​
+loan
+object
+​
+loan.id
+number
+Loopscale internal loan ID
+
+​
+loan.address
+string
+Onchain PDA
+
+​
+loan.bump
+number
+Onchain bump for deriving the PDA efficiently
+
+​
+loan.loanStatus
+number
+A loans current status enum (0 = Active, 3 = Locked)
+
+​
+loan.nonce
+number
+Onchain iterator in the event multiple loans for the same borrower are started at the same timestamp
+
+​
+loan.borrower
+string
+Public key of the wallet initializing the loan and with full authority over assets supplied.
+
+​
+loan.startTime
+number
+The date at which the onchain
+
+​
+loan.closed
+any
+​
+loan.lastInteractedTime
+number
+Timestamp of the last time the indexed loan state was picked up
+
+​
+loan.lastInteractedTxn
+string
+Transaction the Loopscale indexer last picked up
+
+​
+loan.writeVersion
+number
+Number write on the last interacted transaction this is (Used for indexing)
+
+​
+loanType
+number
+Loan type enum (0 = Term loan, 2 = Loop)
+
+​
+ledgers
+object[]
+Current ledgers in use by the Loan
+
+​
+id
+number
+Loopscale internal ledger ID
+
+​
+ledgerIndex
+number
+Each loan may have up to five ledgers, this is the fixed index in that array of ledgers
+
+​
+loan
+string
+Parent loan of the ledger
+
+​
+status
+number
+Enum of ledger's status (0 = Uninitialized, 2 = Active, 3 = Liquidated)
+
+​
+strategy
+string
+Lender account that this ledger is borrowing from.
+
+​
+principalMint
+string
+Mint of the token borrowed
+
+​
+marketInformation
+string
+Public key of the market information account defining the LTV, oracle, and liquidation ratio of the ledger
+
+​
+apy
+number
+Active interest rate for the loan, recorded in cBPS (1/100th of a basis point), compounding annually.
+
+​
+principalDue
+number
+Total principal originated, this number is only ever incremented. Defined in principal mint lamports.
+
+​
+principalRepaid
+number
+Total principal repaid, this number is only ever incremented. Defined in principal mint lamports.
+
+​
+interestPerSecond
+number
+The amount of interest being accrued every second to the loan. Defined as (apy * (principal_due - principal_repaid) / SECONDS_PER_YEAR). Defined in principal mint lamports, 18 digits of precision.*
+
+​
+lastInterestUpdateTime
+number
+Timestamp of the last time interest was cranked.
+
+​
+interestOutstanding
+number
+Amount of unpaid interest accrued since the previous crank. Defined in principal mint lamports. Total ledger outstanding balance can be computed as (principal_due - principal_repaid) + (interest_per_second * (current_time - last_interest_update_time)) + interest_outstanding.*
+
+​
+durationType
+number
+Enum of the units the ledgers duration is denominated in (0 - Days, 1 - Weeks, 2 - Months, 3 - Minutes, 4 - Years)
+
+​
+duration
+number
+Loan duration denominated in durationType
+
+​
+startTime
+number
+The timestamp at which this ledgers term starts
+
+​
+endTime
+number
+The timestamp at which this ledgers term ends
+
+​
+weights
+number[]
+The portion of a loans collateral assigned to this ledger, length of 5. Denominated in cBPS (1/100th of a basis point).
+
+​
+ltvRatios
+number[]
+The agreed upon max loan-to-value per collateral for to this ledger, length of 5. Denominated in cBPS (1/100th of a basis point).
+
+​
+lqtRatios
+number[]
+The agreed upon liquidation ratio per collateral for this ledger, length of 5. Denominated in cBPS (1/100th of a basis point).
+
+​
+lastInteractedTime
+number
+Timestamp of the last time the indexed ledger state was picked up
+
+​
+lastInteractedTxn
+string
+Transaction the Loopscale indexer last picked up
+
+​
+writeVersion
+number
+Number write on the last interacted transaction this is (Used for indexing)
+
+​
+pastLedgers
+object[]
+Ledgers that may have been closed onchain, but an indexed copy remains.
+
+​
+id
+number
+Loopscale internal ledger ID
+
+​
+ledgerIndex
+number
+Each loan may have up to five ledgers, this is the fixed index in that array of ledgers
+
+​
+loan
+string
+Parent loan of the ledger
+
+​
+status
+number
+Enum of ledger's status (0 = Uninitialized, 2 = Active, 3 = Liquidated)
+
+​
+strategy
+string
+Lender account that this ledger is borrowing from.
+
+​
+principalMint
+string
+Mint of the token borrowed
+
+​
+marketInformation
+string
+Public key of the market information account defining the LTV, oracle, and liquidation ratio of the ledger
+
+​
+apy
+number
+Active interest rate for the loan, recorded in cBPS (1/100th of a basis point), compounding annually.
+
+​
+principalDue
+number
+Total principal originated, this number is only ever incremented. Defined in principal mint lamports.
+
+​
+principalRepaid
+number
+Total principal repaid, this number is only ever incremented. Defined in principal mint lamports.
+
+​
+interestPerSecond
+number
+The amount of interest being accrued every second to the loan. Defined as (apy * (principal_due - principal_repaid) / SECONDS_PER_YEAR). Defined in principal mint lamports, 18 digits of precision.*
+
+​
+lastInterestUpdateTime
+number
+Timestamp of the last time interest was cranked.
+
+​
+interestOutstanding
+number
+Amount of unpaid interest accrued since the previous crank. Defined in principal mint lamports. Total ledger outstanding balance can be computed as (principal_due - principal_repaid) + (interest_per_second * (current_time - last_interest_update_time)) + interest_outstanding.*
+
+​
+durationType
+number
+Enum of the units the ledgers duration is denominated in (0 - Days, 1 - Weeks, 2 - Months, 3 - Minutes, 4 - Years)
+
+​
+duration
+number
+Loan duration denominated in durationType
+
+​
+startTime
+number
+The timestamp at which this ledgers term starts
+
+​
+endTime
+number
+The timestamp at which this ledgers term ends
+
+​
+weights
+number[]
+The portion of a loans collateral assigned to this ledger, length of 5. Denominated in cBPS (1/100th of a basis point).
+
+​
+ltvRatios
+number[]
+The agreed upon max loan-to-value per collateral for to this ledger, length of 5. Denominated in cBPS (1/100th of a basis point).
+
+​
+lqtRatios
+number[]
+The agreed upon liquidation ratio per collateral for this ledger, length of 5. Denominated in cBPS (1/100th of a basis point).
+
+​
+lastInteractedTime
+number
+Timestamp of the last time the indexed ledger state was picked up
+
+​
+lastInteractedTxn
+string
+Transaction the Loopscale indexer last picked up
+
+​
+writeVersion
+number
+Number write on the last interacted transaction this is (Used for indexing)
+
+​
+collateral
+object[]
+​
+id
+number
+Loopscale internal loan collateral ID
+
+​
+loan
+string
+Loan this collateral is deposited to.
+
+​
+index
+number
+The index in the collateral array this asset is recorded in.
+
+​
+assetType
+number
+Enum of collateral asset's type (0 = Normal Token, 2 = Orca Whirlpool, 3 = Raydium CLMM, 4 = Meteora DLMM)
+
+​
+assetIdentifier
+string
+The onchain category for the asset. (Equivalent to assetMint for assetType = 0)
+
+​
+assetMint
+string
+The specific asset mint supplied
+
+​
+amount
+number
+The amount of this collateral asset supplied (in lamports)
+
+​
+lastInteractedTime
+number
+Timestamp of the last time the indexed collateral state was picked up
+
+​
+lastInteractedTxn
+string
+Transaction the Loopscale indexer last picked up
+
+​
+writeVersion
+number
+Number write on the last interacted transaction this is (Used for indexing)
+
+​
+events
+object[]
+​
+id
+number
+Loopscale internal event ID
+
+​
+loan
+string
+Loan this event is related to.
+
+​
+assetIdentifier
+string
+The onchain category for the asset. (Equivalent to assetMint for assetType = 0)
+
+​
+assetMint
+string
+The specific asset mint supplied
+
+​
+amount
+number
+Amount of the corresponding asset being transferred (lamports)
+
+​
+originalLender
+string
+In the event of a ledger sale, this would be the lender selling the ledger
+
+​
+newLender
+string
+In the event of a ledger sale, this would be the lender receiving the ledger
+
+​
+action
+number
+Enum of the action this event represents (0 - Add Collateral, 1 - Remove Collateral, 2 - Borrow Principal, 3 - Repay Principal, 4 - Refinance Ledger, 5 - Sell Ledger, 6 - Liquidate
+
+​
+actionMetadata
+object
+Optional object of additional data depending on action type
+
+​
+eventTime
+number
+Timestamp of the last time the indexed collateral state was picked up
+
+​
+usdPrice
+number
+Price of the asset at the time of the event (optional)
+
+​
+eventTxn
+string
+Transaction the event was transmitted in
+
+​
+matrixUpdates
+object[]
+​
+id
+number
+Loopscale internal event ID
+
+​
+loan
+string
+Loan this event is related to.
+
+​
+ledgerIndex
+number
+Index of the ledger this update applied to
+
+​
+weights
+number[]
+The portion of a loans collateral assigned to this ledger, length of 5. Denominated in cBPS (1/100th of a basis point).
+
+​
+ltvRatios
+number[]
+The agreed upon max loan-to-value per collateral for to this ledger, length of 5. Denominated in cBPS (1/100th of a basis point).
+
+​
+lqtRatios
+number[]
+The agreed upon liquidation ratio per collateral for this ledger, length of 5. Denominated in cBPS (1/100th of a basis point).
+
+​
+timestamp
+number
+Timestamp of the last time the indexed collateral state was picked up
+
+​
+txnSignature
+string
+Transaction the Loopscale indexer last picked up
+
+​
+writeVersion
+number
+Number write on the last interacted transaction this is (Used for indexing)
+
+​
+collateralYield
+object[]
+​
+id
+number
+​
+collateralMint
+string
+​
+collateralApy
+number
+​
+collateralTimestamp
+number
+
+https://docs.loopscale.com/api-reference/data/user/get-collateral-holders
+Users
+Get collateral holders
+Fetches a list of users and total balances for one or more specified collateral mints.
+
+POST
+/markets/collateral/holders
+
+curl --request POST \
+  --url https://tars.loopscale.com/v1/markets/collateral/holders \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "mints": [
+    "<string>"
+  ],
+  "pdas": true
+}'
+
+[
+  {
+    "collateralMint": "6TiBRYFLs9H4wnwEVyqZfPs6bshAM9ZcaS976tDDGuD",
+    "totalDeposits": 389168.10806099995,
+    "userDeposits": {
+      "G7mjP2Hpj3A5d6f1LTjXUAy8MR8FDTvZcPY79RDhQv": 278911.414198,
+      "6Fjoe4udyj6r1ZLk3MDPcFzeDYNWvekSkjNwyEAsWTmTw": 137741.601249
+    }
+  }
+]
+
+Body
+application/json
+​
+mints
+string[]required
+List of collateral mint addresses to filter for.
+
+​
+pdas
+boolean
+Whether to return the PDAs holding the assets or the end borrower wallet.
+
+Response
+
+200
+
+application/json
+A list of collateral holder objects
+
+​
+collateralMint
+string
+​
+totalDeposits
+number
+​
+userDeposits
+object
+Deposits per user of corresponding collateral
+
+​
+userDeposits.[address]
+number
+
+https://docs.loopscale.com/api-reference/data/user/get-historical-collateral-holders
+Users
+Get historical collateral holders
+Fetches a list of users and cumulative deposit seconds for a mint over a period of time.
+
+POST
+/markets/collateral/holders/historical
+
+curl --request POST \
+  --url https://tars.loopscale.com/v1/markets/collateral/holders/historical \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "mint": "<string>",
+  "rangeStart": 123,
+  "rangeEnd": 123,
+  "pdas": true
+}'
+
+[
+  {
+    "collateralMint": "6TiBRYFLs9H4wnwEVyqZfPs6bshAM9ZcaS976tDDGuD",
+    "rangeStart": 1749388814,
+    "rangeEnd": 1758399614,
+    "userDepositSeconds": {
+      "G7mjP2Hpj3A5d6f1LTjXUAy8MR8FDTvZcPY79RDhQv": 278911.414198,
+      "6Fjoe4udyj6r1ZLk3MDPcFzeDYNWvekSkjNwyEAsWTmTw": 137741.601249
+    }
+  }
+]
+
+Body
+application/json
+​
+mint
+stringrequired
+List of collateral mint addresses to filter for.
+
+​
+rangeStart
+number
+Unix timestamp of earliest time cutoff to include (min of GENESIS). If undefined, will run to GENESIS
+
+​
+rangeEnd
+number
+Unix timestamp of last date to include (max of today). If undefined, will run to present
+
+​
+pdas
+boolean
+Whether to return the PDAs holding the assets or the end borrower wallet.
+
+Response
+
+200
+
+application/json
+A list of collateral holders over time.
+
+​
+collateralMint
+string
+​
+rangeStart
+number
+​
+rangeEnd
+number
+​
+userDepositSeconds
+object
+Deposit Seconds per user of corresponding collateral, Deposit Second = Seconds supplied * Quantity supplied.*
+​
+userDepositSeconds.[address]
+number
+
+
+https://docs.loopscale.com/api-reference/data/user/get-vault-depositors
+Users
+Get vault depositors
+Fetches a list of users and total balances grouped by vault.
+
+POST
+/markets/lending_vaults/deposits
+
+curl --request POST \
+  --url https://tars.loopscale.com/v1/markets/lending_vaults/deposits \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "vaultAddresses": [
+    "<string>"
+  ],
+  "principalMints": [
+    "<string>"
+  ]
+}'
+
+[
+  {
+    "vaultAddress": "AXanCP4dJHtWd7zY4X7nwxN5t5Gysfy2uG3XTxSmXdaB",
+    "userDeposits": [
+      {
+        "userAddress": "2fyUG8mSGgCkh9jDaSHToN4dPrp5x3Bb7boETVMRHR6h",
+        "amountSupplied": 41214262
+      }
+    ]
+  }
+]
+
+Body
+application/json
+​
+vaultAddresses
+string[]
+List of vaults to query by, must include this or principalMints.
+
+​
+principalMints
+string[]
+List of principal tokens to query by, must include this or vaultAddresses.
+
+Response
+
+200
+
+application/json
+A list of vaults and an array of users and their balances in the vault
+
+List of user positions separated by vault
+
+​
+vaultAddress
+string
+The vault the deposits are mapped to
+
+​
+userDeposits
+object[]
+Deposits per user to corresponding vault
+
+​
+userAddress
+string
+​
+amountSupplied
+string
+
+
+https://docs.loopscale.com/api-reference/transactions/vault/deposit
+Vault
+Vault deposit
+Deposit funds into a target lending vault. On an additional deposit, the previous stake account and reward schedule is deleted and a new one is created.
+
+POST
+/markets/lending_vaults/deposit
+
+curl --request POST \
+  --url https://tars.loopscale.com/v1/markets/lending_vaults/deposit \
+  --header 'Content-Type: application/json' \
+  --header 'user-wallet: <user-wallet>' \
+  --data '{
+  "principalAmount": 123,
+  "minLpAmount": 123,
+  "vault": "<string>"
+}'
+
+{
+  "transaction": {
+    "message": "<string>",
+    "signatures": [
+      {
+        "publicKey": "<string>",
+        "signature": "<string>"
+      }
+    ]
+  },
+  "stakeAccount": "<string>"
+}
+
+Headers
+​
+user-wallet
+stringrequired
+Wallet address of the depositing user
+
+Body
+application/json
+​
+principalAmount
+numberrequired
+Amount of Principal tokens to deposit (in lamports)
+
+​
+minLpAmount
+numberrequired
+Minimum number of LP tokens you are willing to accept in exchange for your principal deposit, in the event vault increases in value between quote and execution
+
+​
+vault
+stringrequired
+Lending vault address
+
+Response
+
+200
+
+application/json
+Serialized transaction and update stake account
+
+​
+transaction
+object
+Hide child attributes
+
+​
+transaction.message
+stringrequired
+Base64-encoded versioned transaction message
+
+​
+transaction.signatures
+object[]required
+Hide child attributes
+
+​
+publicKey
+stringrequired
+​
+signature
+stringrequired
+​
+stakeAccount
+string
+Address of the stake account holding LP tokens (if >0)
+
+
+https://docs.loopscale.com/api-reference/transactions/vault/withdraw
+Vault
+Vault Withdraw
+Withdraw funds from a target lending vault. If any deposits remain, the previous stake account and reward schedule is deleted and a new one is created.
+POST
+/markets/lending_vaults/withdraw
+
+curl --request POST \
+  --url https://tars.loopscale.com/v1/markets/lending_vaults/withdraw \
+  --header 'Content-Type: application/json' \
+  --header 'user-wallet: <user-wallet>' \
+  --data '{
+  "amountPrincipal": 123,
+  "maxAmountLp": 123,
+  "vault": "<string>",
+  "withdrawAll": true
+}'
+
+{
+  "transaction": {
+    "message": "<string>",
+    "signatures": [
+      {
+        "publicKey": "<string>",
+        "signature": "<string>"
+      }
+    ]
+  },
+  "stakeAccount": "<string>"
+}
+
+Headers
+​
+user-wallet
+stringrequired
+Wallet address of the withdrawing user
+
+Body
+application/json
+​
+amountPrincipal
+numberrequired
+Amount of Principal tokens to withdraw (in lamports)
+
+​
+maxAmountLp
+numberrequired
+Maximum number of LP tokens you are willing to accept in exchange for your principal withdrawal, in the event vault loses value between quote and execution
+
+​
+vault
+stringrequired
+Lending vault address
+
+​
+withdrawAll
+boolean
+Set to true to withdraw all available principal (ignores amountPrincipal and maxAmountLp)
+
+Response
+
+200
+
+application/json
+Serialized transaction and update stake account
+
+​
+transaction
+object
+Hide child attributes
+
+​
+transaction.message
+stringrequired
+Base64-encoded versioned transaction message
+
+​
+transaction.signatures
+object[]required
+Hide child attributes
+
+​
+publicKey
+stringrequired
+​
+signature
+stringrequired
+​
+stakeAccount
+string
+Address of the stake account holding LP tokens (if >0)
+
+https://docs.loopscale.com/api-reference/transactions/vault/claim-rewards
+Vault
+Claim vault rewards
+Claim rewards from a target lending vault. This will harvest from all available rewards schedules and close empty accounts to refund SOL to requesting wallet.
+
+POST https://tars.loopscale.com/v1/markets/lending_vaults/rewards/claim
+
+curl --request POST \
+  --url https://tars.loopscale.com/v1/markets/lending_vaults/rewards/claim \
+  --header 'Content-Type: application/json' \
+  --header 'user-wallet: <user-wallet>' \
+  --data '{
+  "rewardMints": [
+    "<string>"
+  ],
+  "unclaimedStakeAccounts": [
+    "<string>"
+  ],
+  "vaultAddress": "<string>"
+}'
+
+[
+  {
+    "transaction": {
+      "message": "<string>",
+      "signatures": [
+        {
+          "publicKey": "<string>",
+          "signature": "<string>"
+        }
+      ]
+    }
+  }
+]
+
+Headers
+​
+user-wallet
+stringrequired
+Wallet address of the claiming user
+
+Body
+application/json
+​
+rewardMints
+string[]required
+Mints of the reward tokens to claim
+
+​
+unclaimedStakeAccounts
+string[]required
+Array of stake account addresses with unclaimed rewards, if empty will claim from all.
+
+​
+vaultAddress
+stringrequired
+Lending vault address
+
+Response
+
+200
+
+application/json
+Serialized transactions to claim rewards
+
+​
+transaction
+object
+Hide child attributes
+
+​
+transaction.message
+stringrequired
+Base64-encoded versioned transaction message
+
+​
+transaction.signatures
+object[]required
+Hide child attributes
+
+​
+publicKey
+stringrequired
+​
+signature
+stringrequired

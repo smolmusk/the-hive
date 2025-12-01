@@ -94,6 +94,10 @@ TOOL DESCRIPTIONS:
 - ${SOLANA_LEND_ACTION}: Show lending interface to lend stablecoins into a lending pool. **Required parameters**: tokenAddress (contract address), tokenSymbol (e.g., "USDC", "USDT"), protocol (protocol name like "francium", "kamino"), protocolAddress, walletAddress, and optionally amount.
 - ${SOLANA_WITHDRAW_ACTION}: Show withdrawal interface to withdraw stablecoins from lending positions. Requires contract address of the token and protocol.
 
+Loopscale-specific:
+- Loopscale uses vault addresses. ALWAYS capture the vault address and pass it as protocolAddress into ${SOLANA_LEND_ACTION} and ${SOLANA_WITHDRAW_ACTION}. If the user doesn’t provide a vault address, ask for it.
+- Loopscale withdraws are supported. Set protocol="loopscale" and protocolAddress=vault address when calling ${SOLANA_WITHDRAW_ACTION}.
+
 LENDING OVERVIEW:
 Lending allows users to deposit assets into lending protocols to earn interest. These protocols lend out the deposited funds to borrowers and share the interest with lenders. Supported assets include stablecoins (USDC, USDT, USDG, etc.), native SOL, liquid staking tokens (JITOSOL, MSOL, etc.), and other crypto assets (ETH, WBTC, etc.).
 
@@ -103,6 +107,7 @@ COMMON LENDING PROTOCOLS:
 - Marginfi - Risk management focused
 - Maple Finance - Institutional grade
 - Save Finance - Simple and user-friendly
+- Loopscale - Vault-based deposits; requires the vault address (protocolAddress) to build transactions
 
 You can use these tools to help users with lending and withdrawing their stablecoins.
 

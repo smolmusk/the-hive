@@ -3,6 +3,7 @@ import {
   PublicKey,
   TransactionMessage,
   VersionedTransaction,
+  VersionedMessage,
   TransactionInstruction,
 } from '@solana/web3.js';
 import BN from 'bn.js';
@@ -22,37 +23,138 @@ import {
   type Rpc,
 } from '@solana/kit';
 
+const LOOPSCALE_BASE_URL = process.env.LOOPSCALE_BASE_URL || 'https://tars.loopscale.com/v1';
 const KAMINO_MAIN_MARKET = new PublicKey('7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF');
 const KAMINO_PROGRAM_ID = new PublicKey('KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD');
 
 /**
- * Helper function to convert Kamino SDK instruction format to legacy TransactionInstruction
+ * POST /api/lending/withdraw
+ *
+ * Build a withdraw transaction on the server side (required for SDKs with Node.js dependencies)
  */
-function convertKaminoInstructionToLegacy(instruction: Instruction): TransactionInstruction {
-  if (!instruction.accounts || !instruction.data) {
-    throw new Error('Instruction missing required accounts or data');
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const {
+      protocol,
+      tokenMint,
+      tokenSymbol,
+      amount,
+      walletAddress,
+      protocolAddress,
+      withdrawAll,
+    } = body;
+
+    if (!protocol || !tokenMint || !tokenSymbol || (!amount && !withdrawAll) || !walletAddress) {
+      return NextResponse.json(
+        {
+          error:
+            'Missing required fields: protocol, tokenMint, tokenSymbol, walletAddress, and either amount or withdrawAll',
+        },
+        { status: 400 },
+      );
+    }
+
+    const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
+    const wallet = new PublicKey(walletAddress);
+
+    let transaction: VersionedTransaction;
+
+    switch (protocol.toLowerCase()) {
+      case 'kamino-lend':
+      case 'kamino':
+      case 'jupiter-lend':
+      case 'jup-lend':
+        transaction = await buildKaminoWithdrawTx(
+          connection,
+          wallet,
+          tokenMint,
+          tokenSymbol,
+          amount || 0,
+        );
+        break;
+      case 'loopscale':
+      case 'loopscale-lend':
+      case 'loopscale-vault':
+        transaction = await buildLoopscaleWithdrawTx(
+          wallet,
+          tokenSymbol,
+          amount || 0,
+          protocolAddress,
+          withdrawAll,
+        );
+        break;
+      default:
+        return NextResponse.json({ error: `Unsupported protocol: ${protocol}` }, { status: 400 });
+    }
+
+    // Serialize transaction to base64 for client
+    const serialized = Buffer.from(transaction.serialize()).toString('base64');
+
+    return NextResponse.json({
+      transaction: serialized,
+      protocol,
+    });
+  } catch (error: any) {
+    console.error('Error building withdraw transaction:', error);
+    return NextResponse.json(
+      { error: error.message || 'Failed to build withdraw transaction' },
+      { status: 500 },
+    );
   }
+}
 
-  return new TransactionInstruction({
-    programId: new PublicKey(instruction.programAddress),
-    keys: instruction.accounts.map((account: any) => {
-      // Kamino SDK uses numeric roles as a bitfield:
-      // 0 = read-only
-      // 1 = writable (bit 0)
-      // 2 = signer (bit 1)
-      // 3 = signer + writable (bits 0 and 1)
-      const role = typeof account.role === 'number' ? account.role : 0;
-      const isWritable = (role & 1) !== 0; // Check bit 0
-      const isSigner = (role & 2) !== 0; // Check bit 1
+/**
+ * Loopscale - Vault Withdraw
+ */
+async function buildLoopscaleWithdrawTx(
+  wallet: PublicKey,
+  tokenSymbol: string,
+  amount: number,
+  vaultAddress?: string,
+  withdrawAll?: boolean,
+): Promise<VersionedTransaction> {
+  try {
+    if (!vaultAddress) {
+      throw new Error('Loopscale vault address is required (pass via protocolAddress)');
+    }
 
-      return {
-        pubkey: new PublicKey(account.address),
-        isSigner,
-        isWritable,
-      };
-    }),
-    data: Buffer.from(instruction.data),
-  });
+    const decimals = tokenSymbol.toUpperCase() === 'SOL' ? 9 : 6;
+    const amountPrincipal = Math.floor(amount * Math.pow(10, decimals));
+
+    const response = await fetch(`${LOOPSCALE_BASE_URL}/markets/lending_vaults/withdraw`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'user-wallet': wallet.toBase58(),
+      },
+      body: JSON.stringify({
+        amountPrincipal,
+        maxAmountLp: amountPrincipal || 0,
+        vault: vaultAddress,
+        withdrawAll: !!withdrawAll,
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Loopscale withdraw failed: ${response.status} ${text || 'Unknown error'}`);
+    }
+
+    const data = await response.json();
+    const messageB64 = data?.transaction?.message;
+    if (!messageB64) {
+      throw new Error('Loopscale response missing transaction.message');
+    }
+
+    const message = VersionedMessage.deserialize(Buffer.from(messageB64, 'base64'));
+    const tx = new VersionedTransaction(message);
+
+    return tx;
+  } catch (err: any) {
+    console.error('❌ Error building Loopscale withdraw transaction:', err);
+    throw new Error(`Failed to build Loopscale withdraw transaction: ${err.message || err}`);
+  }
 }
 
 /**
@@ -190,61 +292,30 @@ async function buildKaminoWithdrawTx(
 }
 
 /**
- * POST /api/lending/withdraw
- *
- * Build a withdraw transaction on the server side (required for SDKs with Node.js dependencies)
+ * Helper function to convert Kamino SDK instruction format to legacy TransactionInstruction
  */
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const { protocol, tokenMint, tokenSymbol, amount, walletAddress } = body;
-
-    if (!protocol || !tokenMint || !tokenSymbol || !amount || !walletAddress) {
-      return NextResponse.json(
-        {
-          error: 'Missing required fields: protocol, tokenMint, tokenSymbol, amount, walletAddress',
-        },
-        { status: 400 },
-      );
-    }
-
-    const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL!);
-    const wallet = new PublicKey(walletAddress);
-
-    let transaction: VersionedTransaction;
-
-    // Route to protocol-specific withdraw builder
-    switch (protocol.toLowerCase()) {
-      case 'kamino-lend':
-      case 'kamino':
-        transaction = await buildKaminoWithdrawTx(
-          connection,
-          wallet,
-          tokenMint,
-          tokenSymbol,
-          amount,
-        );
-        break;
-      // Add more protocols here as they're implemented:
-      // case 'jupiter-lend':
-      //   transaction = await buildJupiterWithdrawTx(connection, wallet, tokenMint, tokenSymbol, amount);
-      //   break;
-      default:
-        return NextResponse.json({ error: `Unsupported protocol: ${protocol}` }, { status: 400 });
-    }
-
-    // Serialize transaction to base64 for client
-    const serialized = Buffer.from(transaction.serialize()).toString('base64');
-
-    return NextResponse.json({
-      transaction: serialized,
-      protocol,
-    });
-  } catch (error: any) {
-    console.error('Error building withdraw transaction:', error);
-    return NextResponse.json(
-      { error: error.message || 'Failed to build withdraw transaction' },
-      { status: 500 },
-    );
+function convertKaminoInstructionToLegacy(instruction: Instruction): TransactionInstruction {
+  if (!instruction.accounts || !instruction.data) {
+    throw new Error('Instruction missing required accounts or data');
   }
+
+  return new TransactionInstruction({
+    programId: new PublicKey(instruction.programAddress),
+    keys: instruction.accounts.map((account: any) => {
+      // 0 = read-only
+      // 1 = writable (bit 0)
+      // 2 = signer (bit 1)
+      // 3 = signer + writable (bits 0 and 1)
+      const role = typeof account.role === 'number' ? account.role : 0;
+      const isWritable = (role & 1) !== 0; // Check bit 0
+      const isSigner = (role & 2) !== 0; // Check bit 1
+
+      return {
+        pubkey: new PublicKey(account.address),
+        isSigner,
+        isWritable,
+      };
+    }),
+    data: Buffer.from(instruction.data),
+  });
 }

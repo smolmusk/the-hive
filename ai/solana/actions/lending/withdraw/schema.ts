@@ -4,6 +4,7 @@ export const WithdrawArgumentsType = z.object({
   amount: z.number(),
   tokenAddress: z.string(),
   protocolAddress: z.string(),
+  protocol: z.string().optional(),
   walletAddress: z.string(),
 });
 

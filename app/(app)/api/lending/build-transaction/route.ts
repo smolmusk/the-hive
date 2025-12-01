@@ -3,6 +3,7 @@ import {
   PublicKey,
   TransactionMessage,
   VersionedTransaction,
+  VersionedMessage,
   TransactionInstruction,
 } from '@solana/web3.js';
 import { getDepositIx } from '@jup-ag/lend/earn';
@@ -24,6 +25,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { KaminoMarket, KaminoAction, VanillaObligation } from '@kamino-finance/klend-sdk';
 import { createSolanaRpc, address as createAddress, Instruction } from '@solana/kit';
 
+const LOOPSCALE_BASE_URL = process.env.LOOPSCALE_BASE_URL || 'https://tars.loopscale.com/v1';
+
 /**
  * Kamino Lending Market Configuration
  *
@@ -44,7 +47,7 @@ const KAMINO_PROGRAM_ID = new PublicKey('KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYav
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { walletAddress, tokenMint, tokenSymbol, amount, protocol } = body;
+    const { walletAddress, tokenMint, tokenSymbol, amount, protocol, protocolAddress } = body;
 
     if (!walletAddress || !tokenMint || !tokenSymbol || !amount || !protocol) {
       return NextResponse.json(
@@ -67,13 +70,7 @@ export async function POST(req: NextRequest) {
       case 'jupiter-lend':
       case 'jupiter-lend-earn':
       case 'jup-lend':
-        transaction = await buildJupiterLendTx(
-          connection,
-          walletPubkey,
-          tokenMint,
-          tokenSymbol,
-          amount,
-        );
+        transaction = await buildJupiterLendTx(connection, walletPubkey, tokenMint, amount);
         break;
 
       // TODO: Solend SDK disabled due to unfixable dependency issues
@@ -84,12 +81,17 @@ export async function POST(req: NextRequest) {
 
       case 'kamino-lend':
       case 'kamino':
-        transaction = await buildKaminoLendTx(
+        transaction = await buildKaminoLendTx(connection, walletPubkey, tokenMint, amount);
+        break;
+      case 'loopscale':
+      case 'loopscale-lend':
+      case 'loopscale-vault':
+        transaction = await buildLoopscaleLendTx(
           connection,
           walletPubkey,
           tokenMint,
-          tokenSymbol,
           amount,
+          protocolAddress,
         );
         break;
       case 'marginfi-lending':
@@ -139,14 +141,13 @@ async function buildJupiterLendTx(
   connection: Connection,
   wallet: PublicKey,
   tokenMint: string,
-  tokenSymbol: string,
   amount: number,
 ): Promise<VersionedTransaction> {
   // Convert token mint string to PublicKey
   const assetMint = new PublicKey(tokenMint);
 
-  // Convert amount to proper decimals (6 for USDT/USDC, 9 for SOL)
-  const decimals = tokenSymbol.toUpperCase() === 'SOL' ? 9 : 6;
+  // Convert amount to proper decimals
+  const decimals = await getMintDecimals(connection, tokenMint);
   const amountBN = new BN(Math.floor(amount * Math.pow(10, decimals)));
 
   // Get deposit instruction from Jupiter Lend SDK
@@ -278,6 +279,61 @@ async function buildJupiterLendTx(
 // }
 
 /**
+ * Loopscale - Lending Vault Deposit
+ *
+ * Uses Loopscale vault deposit endpoint to return a versioned transaction message.
+ * NOTE: Loopscale requires the vault address to be provided via protocolAddress.
+ */
+async function buildLoopscaleLendTx(
+  connection: Connection,
+  wallet: PublicKey,
+  tokenMint: string,
+  amount: number,
+  vaultAddress?: string,
+): Promise<VersionedTransaction> {
+  try {
+    if (!vaultAddress) {
+      throw new Error('Loopscale vault address is required (pass via protocolAddress)');
+    }
+
+    const decimals = await getMintDecimals(connection, tokenMint);
+    const principalAmount = Math.floor(amount * Math.pow(10, decimals));
+
+    const response = await fetch(`${LOOPSCALE_BASE_URL}/markets/lending_vaults/deposit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'user-wallet': wallet.toBase58(),
+      },
+      body: JSON.stringify({
+        principalAmount,
+        minLpAmount: 0,
+        vault: vaultAddress,
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Loopscale deposit failed: ${response.status} ${text || 'Unknown error'}`);
+    }
+
+    const data = await response.json();
+    const messageB64 = data?.transaction?.message;
+    if (!messageB64) {
+      throw new Error('Loopscale response missing transaction.message');
+    }
+
+    const message = VersionedMessage.deserialize(Buffer.from(messageB64, 'base64'));
+    const tx = new VersionedTransaction(message);
+
+    return tx;
+  } catch (err: any) {
+    console.error('❌ Error building Loopscale lending transaction:', err);
+    throw new Error(`Failed to build Loopscale transaction: ${err.message || err}`);
+  }
+}
+
+/**
  * Kamino - Lending Transaction
  *
  * Program: KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD
@@ -293,7 +349,6 @@ async function buildKaminoLendTx(
   connection: Connection,
   wallet: PublicKey,
   tokenMint: string,
-  tokenSymbol: string,
   amount: number,
 ): Promise<VersionedTransaction> {
   try {
@@ -311,7 +366,7 @@ async function buildKaminoLendTx(
     }
 
     // Convert amount to base units (lamports/smallest unit)
-    const decimals = tokenSymbol.toUpperCase() === 'SOL' ? 9 : 6;
+    const decimals = await getMintDecimals(connection, tokenMint);
     const amountBase = Math.floor(amount * Math.pow(10, decimals));
 
     // Create a transaction signer for Kamino SDK
@@ -400,7 +455,6 @@ function convertKaminoInstructionToLegacy(instruction: Instruction): Transaction
   return new TransactionInstruction({
     programId: new PublicKey(instruction.programAddress),
     keys: instruction.accounts.map((account: any) => {
-      // Kamino SDK uses numeric roles as a bitfield:
       // 0 = read-only
       // 1 = writable (bit 0)
       // 2 = signer (bit 1)
@@ -417,4 +471,21 @@ function convertKaminoInstructionToLegacy(instruction: Instruction): Transaction
     }),
     data: Buffer.from(instruction.data),
   });
+}
+
+/**
+ * Get mint decimals from chain (with simple in-memory cache)
+ */
+const mintDecimalsCache = new Map<string, number>();
+async function getMintDecimals(connection: Connection, mintAddress: string): Promise<number> {
+  const cached = mintDecimalsCache.get(mintAddress);
+  if (typeof cached === 'number') return cached;
+
+  const info = await connection.getParsedAccountInfo(new PublicKey(mintAddress));
+  const decimals =
+    (info.value?.data as any)?.parsed?.info?.decimals ??
+    (info.value as any)?.data?.parsed?.info?.decimals;
+  const result = typeof decimals === 'number' ? decimals : 6;
+  mintDecimalsCache.set(mintAddress, result);
+  return result;
 }

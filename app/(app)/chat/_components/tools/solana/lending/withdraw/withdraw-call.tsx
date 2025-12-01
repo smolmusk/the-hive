@@ -6,6 +6,8 @@ import { useSendTransaction } from '@/hooks/privy/use-send-transaction';
 import { useTokenBalance } from '@/hooks/queries/token/use-token-balance';
 import TokenInput from '@/app/_components/swap/token-input';
 import WithdrawResult from './withdraw-result';
+import { VersionedTransaction } from '@solana/web3.js';
+import { useTokenDataByAddress } from '@/hooks';
 
 import type { ToolInvocation } from 'ai';
 import type {
@@ -20,10 +22,19 @@ interface Props {
 
 const WithdrawCall: React.FC<Props> = ({ toolCallId, args }) => {
   const { addToolResult } = useChat();
-  const { wallet } = useSendTransaction();
+  const { wallet, sendTransaction } = useSendTransaction();
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [amount, setAmount] = useState('');
   const [selectedToken, setSelectedToken] = useState<any>(null);
+
+  // Load token data by address and preselect
+  const { data: tokenData } = useTokenDataByAddress(args.tokenAddress);
+
+  React.useEffect(() => {
+    if (tokenData && !selectedToken) {
+      setSelectedToken(tokenData);
+    }
+  }, [tokenData, selectedToken]);
 
   // Get token balance (lending position balance)
   const { balance, isLoading: balanceLoading } = useTokenBalance(
@@ -52,17 +63,42 @@ const WithdrawCall: React.FC<Props> = ({ toolCallId, args }) => {
         return;
       }
 
-      // TODO: Implement actual withdrawal transaction
-      // For now, simulate success
+      const response = await fetch('/api/lending/withdraw', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          protocol: args.protocol || 'loopscale',
+          protocolAddress: args.protocolAddress,
+          tokenMint: selectedToken.id,
+          tokenSymbol: selectedToken.symbol,
+          amount: Number(amount),
+          walletAddress: wallet.address,
+          withdrawAll: false,
+        }),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || 'Failed to build withdraw transaction');
+      }
+
+      const { transaction } = await response.json();
+      const txBuffer = Buffer.from(transaction, 'base64');
+      const tx = VersionedTransaction.deserialize(txBuffer);
+
+      const signature = await sendTransaction(tx);
+
       addToolResult<WithdrawResultBodyType>(toolCallId, {
         message: `Successfully withdrew ${amount} ${selectedToken.symbol} from ${args.protocolAddress}`,
         body: {
           success: true,
-          transactionHash: 'stubbed-transaction-hash',
+          transactionHash: signature,
           amount: Number(amount),
           tokenSymbol: selectedToken.symbol,
           protocolName: args.protocolAddress,
-          yieldEarned: 0, // TODO: Calculate actual yield earned
+          yieldEarned: 0,
         },
       });
     } catch (error) {

@@ -8,6 +8,7 @@ import { createSolanaRpc, address as createAddress, type Address, type Rpc } fro
 import { PublicKey } from '@solana/web3.js';
 import { LendingPosition } from '@/types/lending-position';
 import { getKaminoPools, type KaminoPoolData } from './get-kamino-pools';
+import { getLoopscaleVaults } from './get-loopscale-vaults';
 import { getTokenBySymbol } from '@/db/services/tokens';
 import { Token } from '@/db/types/token';
 import { LendingYieldsPoolData } from '@/ai/solana/actions/lending/lending-yields/schema';
@@ -233,19 +234,109 @@ export async function getAllLendingPositionsServer(
     }
 
     // Fetch positions from all supported protocols in parallel
-    const [kaminoPositions] = await Promise.all([
+    const [kaminoPositions, loopscalePositions] = await Promise.all([
       getKaminoLendingPositions(walletAddress, chainId),
-      // Add more protocol fetchers here as they're implemented:
-      // getJupiterLendPositions(walletAddress, chainId),
-      // getMarginfiPositions(walletAddress, chainId),
+      getLoopscaleLendingPositions(walletAddress, chainId),
     ]);
 
     // Aggregate all positions
-    const allPositions = [...kaminoPositions];
+    const allPositions = [...kaminoPositions, ...loopscalePositions];
 
     return allPositions;
   } catch (error) {
     console.error('❌ [SERVER] Error fetching lending positions:', error);
     return []; // Return empty array on error, don't break the portfolio page
+  }
+}
+
+/**
+ * Fetch Loopscale vault deposits for a user
+ */
+async function getLoopscaleLendingPositions(
+  walletAddress: string,
+  chainId: string,
+): Promise<LendingPosition[]> {
+  try {
+    const vaults = await getLoopscaleVaults();
+    if (!vaults.length) return [];
+
+    const positions: LendingPosition[] = [];
+
+    for (const vault of vaults) {
+      const poolMeta = vault.poolMeta;
+      const tokenMint = vault.tokenMintAddress;
+      if (!poolMeta || !tokenMint) continue;
+
+      try {
+        // Fetch deposits for this vault and filter by user
+        const baseUrl = process.env.LOOPSCALE_BASE_URL || 'https://tars.loopscale.com/v1';
+        const res = await fetch(`${baseUrl}/markets/lending_vaults/deposits`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vaultAddresses: [poolMeta] }),
+        });
+        if (!res.ok) continue;
+        const json = (await res.json()) as any[];
+        const userDeposits = Array.isArray(json) ? json[0]?.userDeposits || [] : [];
+        const deposit = userDeposits.find((d: any) => d.userAddress === walletAddress);
+        if (!deposit || !deposit.amountSupplied) continue;
+
+        const amountLamports =
+          typeof deposit.amountSupplied === 'string'
+            ? Number(deposit.amountSupplied)
+            : deposit.amountSupplied;
+        if (!amountLamports || amountLamports <= 0) continue;
+
+        const decimals = vault.tokenData?.decimals ?? 6;
+        const amount = amountLamports / Math.pow(10, decimals);
+        if (amount <= 0) continue;
+
+        // Build token object
+        const token = vault.tokenData
+          ? {
+              id: vault.tokenData.id,
+              name: vault.tokenData.name,
+              symbol: vault.tokenData.symbol,
+              decimals: vault.tokenData.decimals,
+              tags: [],
+              logoURI: vault.tokenData.logoURI || '',
+              freezeAuthority: null,
+              mintAuthority: null,
+              permanentDelegate: null,
+              extensions: {},
+              contractAddress: vault.tokenData.id,
+            }
+          : {
+              id: tokenMint,
+              name: vault.symbol,
+              symbol: vault.symbol,
+              decimals,
+              tags: [],
+              logoURI: '',
+              freezeAuthority: null,
+              mintAuthority: null,
+              permanentDelegate: null,
+              extensions: {},
+              contractAddress: tokenMint,
+            };
+
+        positions.push({
+          walletAddress,
+          chainId,
+          amount,
+          token,
+          poolData: vault,
+          protocol: 'loopscale',
+        });
+      } catch (err) {
+        console.warn(`⚠️ Failed to fetch Loopscale position for vault ${poolMeta}:`, err);
+        continue;
+      }
+    }
+
+    return positions;
+  } catch (error) {
+    console.error('❌ [SERVER] Error fetching Loopscale lending positions:', error);
+    return [];
   }
 }

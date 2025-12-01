@@ -10,15 +10,16 @@ export async function withdraw(
     // TODO: Implement actual withdrawal transaction
     // For now, return a success message as a stub
     const amount = args.amount ?? 0;
+    const protocolName = args.protocol || args.protocolAddress;
 
     return {
-      message: `Successfully withdrew ${amount} ${args.tokenAddress} from protocol ${args.protocolAddress}`,
+      message: `Successfully withdrew ${amount} ${args.tokenAddress} from protocol ${protocolName}`,
       body: {
         success: true,
         transactionHash: 'stubbed-transaction-hash',
         amount,
         tokenSymbol: args.tokenAddress, // TODO: Get actual symbol from token address
-        protocolName: args.protocolAddress, // TODO: Get actual protocol name
+        protocolName, // TODO: Get actual protocol name
         yieldEarned: 0, // TODO: Calculate actual yield earned
       },
     };
