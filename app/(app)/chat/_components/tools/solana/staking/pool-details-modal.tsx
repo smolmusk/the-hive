@@ -33,6 +33,12 @@ const PROTOCOL_AUDITS = [
     auditLink: 'https://skynet.certik.com/projects/kamino-finance',
   },
   {
+    name: 'loopscale',
+    audited: true,
+    rating: 'A',
+    auditLink: 'https://github.com/LoopscaleLabs/audits/blob/main/08-15-2025_loopscale-periphery_adevar-labs.pdf',
+  },
+  {
     name: 'jupiter',
     audited: true,
     rating: 'A',
