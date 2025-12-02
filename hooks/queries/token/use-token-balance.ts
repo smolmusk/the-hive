@@ -28,43 +28,55 @@ export const useTokenBalance = (tokenAddress: string, walletAddress: string) => 
             (await connection.getBalance(new PublicKey(walletAddress))) / LAMPORTS_PER_SOL;
           return balance;
         } else {
-          // Try Token-2022 first, then fall back to regular SPL Token
-          let token_address = getAssociatedTokenAddressSync(
-            new PublicKey(tokenAddress),
-            new PublicKey(walletAddress),
-            false,
-            TOKEN_2022_PROGRAM_ID,
-          );
+          const mint = new PublicKey(tokenAddress);
+          const owner = new PublicKey(walletAddress);
 
-          try {
-            const token_account = await connection.getTokenAccountBalance(token_address);
-            console.log(
-              '✅ Successfully fetched Token-2022 balance:',
-              token_account.value.uiAmount,
-            );
-            return token_account.value.uiAmount ?? 0;
-          } catch {
-            // Try regular SPL Token
+          const getBalanceForProgram = async (programId: PublicKey) => {
+            const ata = getAssociatedTokenAddressSync(mint, owner, false, programId);
             try {
-              token_address = getAssociatedTokenAddressSync(
-                new PublicKey(tokenAddress),
-                new PublicKey(walletAddress),
-                false,
-                TOKEN_PROGRAM_ID,
-              );
-              const token_account = await connection.getTokenAccountBalance(token_address);
-              console.log(
-                '✅ Successfully fetched SPL Token balance:',
-                token_account.value.uiAmount,
-              );
-              return token_account.value.uiAmount ?? 0;
-            } catch (error) {
-              console.error(
-                '❌ Error getting token account balance (tried both Token-2022 and SPL Token):',
-                error,
-              );
-              return 0;
+              const tokenAccount = await connection.getTokenAccountBalance(ata);
+              console.log('✅ Successfully fetched token balance:', tokenAccount.value.uiAmount);
+              return tokenAccount.value.uiAmount ?? 0;
+            } catch (err) {
+              return null; // fall through to next strategy
             }
+          };
+
+          // Try Token-2022, then classic SPL ATA
+          const token2022Balance = await getBalanceForProgram(TOKEN_2022_PROGRAM_ID);
+          if (token2022Balance !== null) return token2022Balance;
+
+          const splBalance = await getBalanceForProgram(TOKEN_PROGRAM_ID);
+          if (splBalance !== null) return splBalance;
+
+          // Fallback: search any token accounts by owner and mint (covers non-ATA accounts)
+          try {
+            const [tokenProgramAccounts, token2022ProgramAccounts] = await Promise.all([
+              connection.getParsedTokenAccountsByOwner(owner, {
+                mint,
+                programId: TOKEN_PROGRAM_ID,
+              }),
+              connection.getParsedTokenAccountsByOwner(owner, {
+                mint,
+                programId: TOKEN_2022_PROGRAM_ID,
+              }),
+            ]);
+
+            const accounts = [...tokenProgramAccounts.value, ...token2022ProgramAccounts.value];
+
+            const total = accounts.reduce((acc, accountInfo) => {
+              const parsed = accountInfo.account.data;
+              const amount = parsed?.parsed?.info?.tokenAmount?.uiAmount ?? 0;
+              return acc + (amount || 0);
+            }, 0);
+
+            if (total > 0) {
+              console.log('✅ Fallback fetched token balance via parsed accounts:', total);
+            }
+            return total;
+          } catch (error) {
+            console.error('❌ Error getting token account balance via parsed accounts:', error);
+            return 0;
           }
         }
       } else {

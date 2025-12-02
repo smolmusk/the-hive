@@ -85,6 +85,43 @@ export const chooseAgent = async (
   model: LanguageModelV1,
   messages: Message[],
 ): Promise<Agent | null> => {
+  // Hard-route obvious action intent to the right agent to avoid knowledge-only replies
+  const lastUserMessage = [...messages].reverse().find((msg) => msg.role === 'user');
+
+  const normalizeContent = (content: Message['content']) => {
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+      const parts = content as Array<string | { text?: string } | { type?: string; text?: string }>;
+      return parts
+        .map((part): string => {
+          if (typeof part === 'string') return part;
+          if (typeof part === 'object' && part && 'text' in part && typeof part.text === 'string') {
+            return part.text;
+          }
+          return '';
+        })
+        .join(' ');
+    }
+    return '';
+  };
+
+  const userText = (lastUserMessage ? normalizeContent(lastUserMessage.content) : '').toLowerCase();
+
+  const stakingIntent = /\b(restake|stake|staking|liquid[\s-]?stake)\b/i.test(userText);
+  const lendingIntent =
+    /\b(lend|lending|deposit|deposits|borrow|borrowing)\b/i.test(userText) ||
+    /\b(compare|find)\b.*\b(yield|apy|apr)\b/i.test(userText) ||
+    /\bearn(ing)?\b.*\b(yield|apy|interest)\b/i.test(userText) ||
+    /\b(lending pool|lending yield|lend to)\b/i.test(userText);
+
+  if (stakingIntent) {
+    return agents.find((agent) => agent.slug === 'staking') ?? null;
+  }
+
+  if (lendingIntent) {
+    return agents.find((agent) => agent.slug === 'lending') ?? null;
+  }
+
   // Use last 5 messages for context (or all if fewer than 5)
   const contextMessages = messages.slice(-5);
 

@@ -15,6 +15,14 @@ import {
   Card,
   TokenIcon,
 } from '@/components/ui';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useSwapModal } from '../../_contexts/use-swap-modal';
 import { useChain } from '@/app/_contexts/chain-context';
 import { cn } from '@/lib/utils';
@@ -31,9 +39,11 @@ interface Props {
 
 const Tokens: React.FC<Props> = ({ stakingPositions, portfolio, portfolioLoading, onRefresh }) => {
   const router = useRouter();
-  const { currentChain } = useChain();
+  const { currentChain, walletAddresses } = useChain();
 
   const { onOpen } = useSwapModal();
+  const [isSolOptionsOpen, setIsSolOptionsOpen] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
 
   // Helper function to handle successful swaps
   const handleSwapSuccess = () => {
@@ -47,6 +57,30 @@ const Tokens: React.FC<Props> = ({ stakingPositions, portfolio, portfolioLoading
     // Navigate to new chat with initial message as query param
     const message = encodeURIComponent('Find me the best staking yields on Solana');
     router.push(`/chat?message=${message}`);
+  };
+
+  const solMint = 'So11111111111111111111111111111111111111112';
+
+  const handleOpenSolOptions = () => {
+    setIsSolOptionsOpen(true);
+    setCopied(false);
+  };
+
+  const handleSwapForSol = () => {
+    setIsSolOptionsOpen(false);
+    openBuy(solMint);
+  };
+
+  const handleCopySolAddress = async () => {
+    const address = walletAddresses.solana;
+    if (!address) return;
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy SOL address', err);
+    }
   };
 
   // Filter out tokens that have liquid staking positions
@@ -153,6 +187,19 @@ const Tokens: React.FC<Props> = ({ stakingPositions, portfolio, portfolioLoading
                       >
                         Buy
                       </Button>
+                      {currentChain === 'solana' && token.address === solMint && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={handleOpenSolOptions}
+                          className={cn(
+                            'bg-brand-50 text-brand-800 hover:bg-brand-100 border border-brand-200',
+                            'dark:bg-brand-950/30 dark:hover:bg-brand-900/40 dark:text-brand-200 dark:border-brand-800/50',
+                          )}
+                        >
+                          Get SOL
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         onClick={() => openSell(token.address)}
@@ -190,6 +237,50 @@ const Tokens: React.FC<Props> = ({ stakingPositions, portfolio, portfolioLoading
           </div>
         </Card>
       )}
+
+      {/* SOL funding options */}
+      <Dialog open={isSolOptionsOpen} onOpenChange={setIsSolOptionsOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Get SOL</DialogTitle>
+            <DialogDescription>
+              Choose how you want to add SOL. You can swap existing tokens for SOL, or top up by
+              sending SOL directly to your wallet.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-3">
+            <Button onClick={handleSwapForSol} className="w-full">
+              Swap tokens for SOL
+            </Button>
+            <div className="flex flex-col gap-2 rounded-lg border border-dashed border-neutral-300 dark:border-neutral-700 p-3">
+              <p className="text-sm font-medium">Top up SOL</p>
+              <p className="text-xs text-muted-foreground">
+                Send SOL from an exchange or another wallet to your address below.
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="text-xs break-all flex-1">
+                  {walletAddresses.solana || 'Connect a Solana wallet to view address'}
+                </code>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!walletAddresses.solana}
+                  onClick={handleCopySolAddress}
+                >
+                  {copied ? 'Copied' : 'Copy'}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="mt-2">
+            <p className="text-xs text-muted-foreground">
+              Keep a little SOL for fees when swapping or staking.
+            </p>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
