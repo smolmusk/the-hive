@@ -20,6 +20,7 @@ import { useTokenMetadata } from '@/hooks/queries/token/use-token-metadata';
 import { useTokenBalance as useWalletTokenBalance } from '@/hooks/queries/token/use-token-balance';
 import { Info, Loader2 } from 'lucide-react';
 import { SOL_MINT } from '@/lib/constants';
+import { LENDING_AGENT_NAME, STAKING_AGENT_NAME } from '@/ai/agents/names';
 import type { ToolInvocation } from 'ai';
 import type { BalanceResultType } from '@/ai';
 
@@ -210,21 +211,13 @@ const TokenFundingOptions: React.FC<TokenFundingOptionsProps> = ({
 };
 
 const GetBalance: React.FC<Props> = ({ tool, prevToolAgent }) => {
-  const { messages, sendMessage } = useChat();
-
-  const isInStakingFlow = messages.some((message) =>
-    message.parts?.some((part) => {
-      return part.type === 'tool-invocation' && part.toolInvocation.toolName.includes(`staking-`);
-    }),
-  );
-
-  const isInLendingFlow = messages.some((message) =>
-    message.parts?.some((part) => {
-      return part.type === 'tool-invocation' && part.toolInvocation.toolName.includes(`lending-`);
-    }),
-  );
-
-  const isInStakingOrLendingFlow = isInStakingFlow || isInLendingFlow;
+  const { sendMessage } = useChat();
+  const flow = String(tool?.args?.flow || '').toLowerCase();
+  const isInStakingFlow = flow === 'staking' || prevToolAgent === STAKING_AGENT_NAME;
+  const isInLendingFlow = flow === 'lending' || prevToolAgent === LENDING_AGENT_NAME;
+  const isInTransferFlow = flow === 'transfer';
+  const isInTradeFlow = flow === 'trade' || flow === 'swap';
+  const isInFlow = isInStakingFlow || isInLendingFlow || isInTransferFlow || isInTradeFlow;
   const tokenAddress = tool?.args?.tokenAddress;
   const walletAddress = tool?.args?.walletAddress;
 
@@ -242,11 +235,27 @@ const GetBalance: React.FC<Props> = ({ tool, prevToolAgent }) => {
         sendMessage(
           `I have acquired ${completedTokenSymbol} (${tokenAddress}) and I'm ready to stake. My wallet address is ${walletAddress}. Please show me the staking interface now.`,
         );
+      } else if (isInTransferFlow) {
+        sendMessage(
+          `I have acquired ${completedTokenSymbol} (${tokenAddress}) and I'm ready to transfer. My wallet address is ${walletAddress}. Please show me the transfer interface now.`,
+        );
+      } else if (isInTradeFlow) {
+        sendMessage(
+          `I have acquired ${completedTokenSymbol} (${tokenAddress}) and I'm ready to trade. My wallet address is ${walletAddress}. Please show me the trading interface now.`,
+        );
       } else {
         sendMessage(`I have the required ${completedTokenSymbol}.`);
       }
     },
-    [sendMessage, isInLendingFlow, isInStakingFlow, tokenAddress, walletAddress],
+    [
+      sendMessage,
+      isInLendingFlow,
+      isInStakingFlow,
+      isInTransferFlow,
+      isInTradeFlow,
+      tokenAddress,
+      walletAddress,
+    ],
   );
 
   return (
@@ -264,7 +273,7 @@ const GetBalance: React.FC<Props> = ({ tool, prevToolAgent }) => {
       result={{
         heading: (result: BalanceResultType) => {
           if (result.body?.token) {
-            if (isInStakingOrLendingFlow && result.body?.balance > 0.00001) {
+            if (isInFlow && result.body?.balance > 0.00001) {
               return `${result.body.balance} ${result.body.token} balance`;
             }
             return `Fetched ${result.body.token} balance`;
@@ -273,7 +282,6 @@ const GetBalance: React.FC<Props> = ({ tool, prevToolAgent }) => {
         },
         body: (result: BalanceResultType) => {
           const tokenSymbol = result.body?.token || tool?.args?.tokenSymbol || '';
-          const isInFlow = isInStakingOrLendingFlow;
           const hasZeroBalance =
             result.body?.balance !== undefined && result.body.balance <= 0.00001;
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useChat } from '@/app/(app)/chat/_contexts/chat';
 import { useChain } from '@/app/_contexts/chain-context';
 import ToolCard from '../../tool-card';
@@ -19,14 +19,38 @@ interface Props {
 }
 
 const LiquidStakingYieldsTool: React.FC<Props> = ({ tool, prevToolAgent }) => {
+  const args = (tool.args ?? {}) as {
+    tokenSymbol?: string;
+    protocol?: string;
+    limit?: number;
+  };
+  const requestedSymbol = args.tokenSymbol ? args.tokenSymbol.toUpperCase() : null;
+  const requestedProtocol = args.protocol ? args.protocol.toLowerCase() : null;
+
+  const loadingLabel = useMemo(() => {
+    if (requestedSymbol && requestedProtocol) {
+      return `Fetching ${requestedSymbol} liquid staking yields on ${requestedProtocol}...`;
+    }
+    if (requestedSymbol) return `Fetching ${requestedSymbol} liquid staking yields...`;
+    if (requestedProtocol) return `Fetching liquid staking yields on ${requestedProtocol}...`;
+    return 'Getting best liquid staking yields...';
+  }, [requestedProtocol, requestedSymbol]);
+
+  const getHeading = (result: LiquidStakingYieldsResultType) => {
+    const pools = result.body || [];
+    if (!pools.length) return 'No staking yields found';
+    if (requestedSymbol) return `Fetched best ${requestedSymbol} liquid staking yields`;
+    if (requestedProtocol) return `Fetched best liquid staking yields on ${requestedProtocol}`;
+    return `Fetched best liquid staking yields`;
+  };
+
   return (
     <ToolCard
       tool={tool}
-      loadingText={`Getting best liquid staking yields...`}
+      loadingText={loadingLabel}
       disableCollapseAnimation
       result={{
-        heading: (result: LiquidStakingYieldsResultType) =>
-          result.body ? `Fetched best liquid staking yields` : 'No staking yields found',
+        heading: (result: LiquidStakingYieldsResultType) => getHeading(result),
         body: (result: LiquidStakingYieldsResultType) =>
           result.body ? <LiquidStakingYields body={result.body} /> : '',
       }}
@@ -39,9 +63,9 @@ const LiquidStakingYieldsTool: React.FC<Props> = ({ tool, prevToolAgent }) => {
 const LiquidStakingYields: React.FC<{
   body: LiquidStakingYieldsResultBodyType;
 }> = ({ body }) => {
-  const { sendMessage, sendInternalMessage, isResponseLoading, messages } = useChat();
+  const { sendMessage, sendInternalMessage, isResponseLoading } = useChat();
   const { currentWalletAddress, setCurrentChain } = useChain();
-  const { user, login, linkWallet, connectWallet, ready } = useLogin();
+  const { user, login, connectWallet, ready } = useLogin();
   const [selectedPool, setSelectedPool] = useState<LiquidStakingYieldsPoolData | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDisabled, setIsDisabled] = useState(true);
@@ -81,7 +105,6 @@ const LiquidStakingYields: React.FC<{
       sendMessage,
       currentWalletAddress,
       login,
-      linkWallet,
       connectWallet,
       setCurrentChain,
       user,
@@ -103,11 +126,6 @@ const LiquidStakingYields: React.FC<{
       setIsDisabled(false);
     }
   }, [isResponseLoading]);
-
-  useEffect(() => {
-    if (!body || !body.length) return;
-    if (isResponseLoading) return;
-  }, [body, isResponseLoading, messages]);
 
   const pools = body ?? [];
   const bestIndex = pools.reduce(

@@ -4,6 +4,10 @@ If no tokenAddress is provided, the balance will be in SOL.
 
 If the user provides a symbol, first use the tokenData tool to get the tokenAddress.
 
+If this balance check is part of a lending or staking flow, include flow: "lending" or flow: "staking" in the tool args so the UI can resume the flow after funding.
+For transfer or trade flows, include flow: "transfer" or flow: "trade".
+For simple wallet balance lookups, include flow: "wallet".
+
 🚨🚨🚨 CRITICAL INSTRUCTION - READ THIS FIRST 🚨🚨🚨
 
 WHEN BALANCE = 0 IN LENDING/STAKING FLOW, YOU **MUST** USE THIS EXACT RESPONSE:

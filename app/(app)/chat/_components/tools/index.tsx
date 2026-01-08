@@ -144,289 +144,118 @@ interface Props {
   prevToolAgent?: string;
 }
 
+type ToolRenderer = (tool: ToolInvocationType, prevToolAgent?: string) => React.ReactElement;
+
+const toolKey = (prefix: string, action: string) => `${prefix}-${action}`;
+
+const withPrev =
+  (Component: React.ComponentType<any>): ToolRenderer =>
+  // eslint-disable-next-line react/display-name
+  (tool, prevToolAgent) => <Component tool={tool} prevToolAgent={prevToolAgent} />;
+
+const withArgs =
+  (Component: React.ComponentType<any>): ToolRenderer =>
+  // eslint-disable-next-line react/display-name
+  (tool, prevToolAgent) => <Component tool={tool} args={tool.args} prevToolAgent={prevToolAgent} />;
+
+const withTool =
+  (Component: React.ComponentType<any>): ToolRenderer =>
+  // eslint-disable-next-line react/display-name
+  (tool) => <Component tool={tool} />;
+
+const TOOL_RENDERERS: Record<string, ToolRenderer> = {
+  [toolKey('baseknowledge', BASE_GET_KNOWLEDGE_NAME)]: withPrev(BaseGetKnowledge),
+  [toolKey('bscwallet', BSC_GET_WALLET_ADDRESS_NAME)]: withPrev(BscGetWalletAddress),
+  [toolKey('bscwallet', BSC_BALANCE_NAME)]: withPrev(GetBscBalance),
+  [toolKey('bscwallet', BSC_ALL_BALANCES_NAME)]: withPrev(GetBscAllBalances),
+  [toolKey('bscwallet', BSC_TRANSFER_NAME)]: withPrev(BscTransfer),
+  [toolKey('bsctokenanalysis', BSC_BUBBLE_MAPS_NAME)]: withPrev(BscBubbleMaps),
+  [toolKey('bsctokenanalysis', BSC_TOP_HOLDERS_NAME)]: withPrev(BscTopHolders),
+  [toolKey('bsctokenanalysis', BSC_PRICE_CHART_NAME)]: withPrev(BscPriceChart),
+  [toolKey('bsctokenanalysis', BSC_GET_TOKEN_DATA_NAME)]: withPrev(BscGetTokenData),
+  [toolKey('bsctokenanalysis', BSC_GET_TOKEN_ADDRESS_NAME)]: withPrev(BscGetTokenAddress),
+  [toolKey('bsctokenanalysis', BSC_TOKEN_HOLDERS_NAME)]: withPrev(BscTokenHolders),
+  [toolKey('bsctokenanalysis', BSC_TOKEN_TOP_TRADERS_NAME)]: withPrev(BscTopTraders),
+  [toolKey('bscmarket', BSC_GET_TRENDING_TOKENS_NAME)]: withPrev(BscGetTrendingTokens),
+  [toolKey('bscmarket', BSC_GET_TRADER_TRADES_NAME)]: withPrev(BscGetTrades),
+  [toolKey('bscmarket', BSC_GET_TOP_TRADERS_NAME)]: withPrev(BscGetTopTraders),
+  [toolKey('bscliquidity', BSC_GET_POOLS_NAME)]: withPrev(BscGetPools),
+  [toolKey('bsctrading', BSC_GET_WALLET_ADDRESS_NAME)]: withPrev(BscGetWalletAddress),
+  [toolKey('bsctrading', BSC_TRADE_NAME)]: withPrev(BscTrade),
+  [toolKey('basetokenanalysis', BASE_BUBBLE_MAPS_NAME)]: withPrev(BaseBubbleMaps),
+  [toolKey('basetokenanalysis', BASE_TOP_HOLDERS_NAME)]: withPrev(BaseTopHolders),
+  [toolKey('basetokenanalysis', BASE_PRICE_CHART_NAME)]: withPrev(BasePriceChart),
+  [toolKey('basetokenanalysis', BASE_GET_TOKEN_DATA_NAME)]: withPrev(BaseGetTokenData),
+  [toolKey('basetokenanalysis', BASE_GET_TOKEN_ADDRESS_NAME)]: withPrev(BaseGetTokenAddress),
+  [toolKey('basetokenanalysis', BASE_TOKEN_HOLDERS_NAME)]: withPrev(BaseTokenHolders),
+  [toolKey('basetokenanalysis', BASE_TOKEN_TOP_TRADERS_NAME)]: withPrev(BaseTopTraders),
+  [toolKey('basemarket', BASE_GET_TRENDING_TOKENS_NAME)]: withPrev(BaseGetTrendingTokens),
+  [toolKey('basemarket', BASE_GET_TOP_TRADERS_NAME)]: withPrev(BaseGetTopTraders),
+  [toolKey('basemarket', BASE_GET_TRADER_TRADES_NAME)]: withPrev(BaseGetTrades),
+  [toolKey('basewallet', BASE_GET_WALLET_ADDRESS_NAME)]: withPrev(BaseGetWalletAddress),
+  [toolKey('basewallet', BASE_BALANCE_NAME)]: withPrev(GetBalance),
+  [toolKey('basewallet', BASE_ALL_BALANCES_NAME)]: withPrev(GetBaseAllBalances),
+  [toolKey('basewallet', BASE_TRANSFER_NAME)]: withPrev(BaseTransfer),
+  [toolKey('baseliquidity', BASE_GET_POOLS_NAME)]: withPrev(BaseGetPools),
+  [toolKey('basetrading', BASE_GET_WALLET_ADDRESS_NAME)]: withPrev(BaseGetWalletAddress),
+  [toolKey('basetrading', BASE_TRADE_NAME)]: withPrev(BaseTrade),
+  [toolKey('staking', SOLANA_STAKE_ACTION)]: withPrev(Stake),
+  [toolKey('staking', SOLANA_UNSTAKE_ACTION)]: withPrev(Unstake),
+  [toolKey('staking', SOLANA_LIQUID_STAKING_YIELDS_ACTION)]: withPrev(LiquidStakingYields),
+  [toolKey('staking', SOLANA_GET_TOKEN_ADDRESS_ACTION)]: withPrev(GetTokenAddress),
+  [toolKey('staking', SOLANA_GET_WALLET_ADDRESS_ACTION)]: withPrev(GetWalletAddress),
+  [toolKey('staking', SOLANA_BALANCE_ACTION)]: withPrev(Balance),
+  [toolKey('staking', SOLANA_TRADE_ACTION)]: withPrev(Trade),
+  [toolKey('lending', SOLANA_LENDING_YIELDS_ACTION)]: withPrev(LendingYieldsTool),
+  [toolKey('lending', SOLANA_LEND_ACTION)]: withPrev(LendTool),
+  [toolKey('lending', SOLANA_WITHDRAW_ACTION)]: withArgs(WithdrawCallBody),
+  [toolKey('lending', SOLANA_GET_TOKEN_ADDRESS_ACTION)]: withPrev(GetTokenAddress),
+  [toolKey('lending', SOLANA_GET_WALLET_ADDRESS_ACTION)]: withPrev(GetWalletAddress),
+  [toolKey('lending', SOLANA_BALANCE_ACTION)]: withPrev(Balance),
+  [toolKey('lending', SOLANA_TRADE_ACTION)]: withPrev(Trade),
+  [toolKey('wallet', SOLANA_BALANCE_ACTION)]: withPrev(Balance),
+  [toolKey('wallet', SOLANA_GET_WALLET_ADDRESS_ACTION)]: withPrev(GetWalletAddress),
+  [toolKey('wallet', SOLANA_ALL_BALANCES_NAME)]: withPrev(AllBalances),
+  [toolKey('wallet', SOLANA_GET_TOKEN_ADDRESS_ACTION)]: withPrev(GetTokenAddress),
+  [toolKey('wallet', SOLANA_TRANSFER_NAME)]: withPrev(SolanaTransfer),
+  [SOLANA_BALANCE_ACTION]: withPrev(Balance),
+  [SOLANA_GET_WALLET_ADDRESS_ACTION]: withPrev(GetWalletAddress),
+  [SOLANA_GET_TRENDING_TOKENS_NAME]: withPrev(GetTrendingTokens),
+  [SOLANA_GET_TOKEN_DATA_NAME]: withPrev(GetTokenData),
+  [SOLANA_TRADE_ACTION]: withPrev(Trade),
+  [SOLANA_LENDING_YIELDS_ACTION]: withPrev(LendingYieldsTool),
+  [SOLANA_LEND_ACTION]: withPrev(LendTool),
+  [SOLANA_WITHDRAW_ACTION]: withArgs(WithdrawCallBody),
+  [SOLANA_LIQUID_STAKING_YIELDS_ACTION]: withPrev(LiquidStakingYields),
+  [SOLANA_TRANSFER_NAME]: withPrev(SolanaTransfer),
+  [TWITTER_SEARCH_RECENT_NAME]: withTool(SearchRecentTweets),
+  [SOLANA_STAKE_ACTION]: withPrev(Stake),
+  [SOLANA_UNSTAKE_ACTION]: withPrev(Unstake),
+  [SOLANA_ALL_BALANCES_NAME]: withPrev(AllBalances),
+  [SEARCH_KNOWLEDGE_NAME]: withPrev(SearchKnowledge),
+  [INVOKE_AGENT_NAME]: withPrev(InvokeAgent),
+  [SOLANA_GET_TOKEN_ADDRESS_ACTION]: withPrev(GetTokenAddress),
+  [SOLANA_TOP_HOLDERS_NAME]: withPrev(GetTopHolders),
+  [SOLANA_BUBBLE_MAPS_NAME]: withPrev(SolanaBubbleMaps),
+  [SOLANA_TOKEN_HOLDERS_NAME]: withPrev(NumHolders),
+  [SOLANA_GET_POOLS_NAME]: withPrev(SolanaGetPools),
+  [SOLANA_DEPOSIT_LIQUIDITY_NAME]: withPrev(DepositLiquidity),
+  [SOLANA_GET_LP_TOKENS_NAME]: withPrev(GetLpTokens),
+  [SOLANA_WITHDRAW_LIQUIDITY_NAME]: withPrev(WithdrawLiquidity),
+  [SOLANA_GET_TOP_TRADERS_NAME]: withPrev(GetTopTraders),
+  [SOLANA_GET_TRADER_TRADES_NAME]: withPrev(GetTrades),
+  [SOLANA_TOKEN_TOP_TRADERS_NAME]: withPrev(GetTopTokenTraders),
+  [SOLANA_TOKEN_PRICE_CHART_NAME]: withPrev(PriceChart),
+  [BSC_GET_KNOWLEDGE_NAME]: withPrev(GetKnowledge),
+};
+
 const ToolInvocation: React.FC<Props> = ({ tool, prevToolAgent }) => {
-  const toolParts = tool.toolName.split('-');
-  const toolAgent = toolParts[0];
-  const toolName = toolParts.slice(1).join('-');
-
-  // Handle Base knowledge tools
-  if (toolAgent === 'baseknowledge') {
-    switch (toolName) {
-      case BASE_GET_KNOWLEDGE_NAME:
-        return <BaseGetKnowledge tool={tool} prevToolAgent={prevToolAgent} />;
-      default:
-        console.log(`Unknown Base knowledge tool: ${toolName}`);
-        return <pre className="whitespace-pre-wrap">{JSON.stringify(tool, null, 2)}</pre>;
-    }
+  const renderer = TOOL_RENDERERS[tool.toolName];
+  if (renderer) {
+    return renderer(tool, prevToolAgent);
   }
 
-  // Handle BSC wallet tools
-  if (toolAgent === 'bscwallet') {
-    switch (toolName) {
-      case BSC_GET_WALLET_ADDRESS_NAME:
-        return <BscGetWalletAddress tool={tool} prevToolAgent={prevToolAgent} />;
-      case BSC_BALANCE_NAME:
-        return <GetBscBalance tool={tool} prevToolAgent={prevToolAgent} />;
-      case BSC_ALL_BALANCES_NAME:
-        return <GetBscAllBalances tool={tool} prevToolAgent={prevToolAgent} />;
-      case BSC_TRANSFER_NAME:
-        return <BscTransfer tool={tool} prevToolAgent={prevToolAgent} />;
-      default:
-        console.log(`Unknown BSC wallet tool: ${toolName}`);
-        return <pre className="whitespace-pre-wrap">{JSON.stringify(tool, null, 2)}</pre>;
-    }
-  }
-
-  // Handle BSC token analysis tools
-  if (toolAgent === 'bsctokenanalysis') {
-    switch (toolName) {
-      case BSC_BUBBLE_MAPS_NAME:
-        return <BscBubbleMaps tool={tool} prevToolAgent={prevToolAgent} />;
-      case BSC_TOP_HOLDERS_NAME:
-        return <BscTopHolders tool={tool} prevToolAgent={prevToolAgent} />;
-      case BSC_PRICE_CHART_NAME:
-        return <BscPriceChart tool={tool} prevToolAgent={prevToolAgent} />;
-      case BSC_GET_TOKEN_DATA_NAME:
-        return <BscGetTokenData tool={tool} prevToolAgent={prevToolAgent} />;
-      case BSC_GET_TOKEN_ADDRESS_NAME:
-        return <BscGetTokenAddress tool={tool} prevToolAgent={prevToolAgent} />;
-      case BSC_TOKEN_HOLDERS_NAME:
-        return <BscTokenHolders tool={tool} prevToolAgent={prevToolAgent} />;
-      case BSC_TOKEN_TOP_TRADERS_NAME:
-        return <BscTopTraders tool={tool} prevToolAgent={prevToolAgent} />;
-      // Add other BSC tools here as they are implemented
-      default:
-        console.log(`Unknown BSC tool: ${toolName}`);
-        return <pre className="whitespace-pre-wrap">{JSON.stringify(tool, null, 2)}</pre>;
-    }
-  }
-
-  if (toolAgent === 'bscmarket') {
-    switch (toolName) {
-      case BSC_GET_TRENDING_TOKENS_NAME:
-        return <BscGetTrendingTokens tool={tool} prevToolAgent={prevToolAgent} />;
-      case BSC_GET_TRADER_TRADES_NAME:
-        return <BscGetTrades tool={tool} prevToolAgent={prevToolAgent} />;
-      case BSC_GET_TOP_TRADERS_NAME:
-        return <BscGetTopTraders tool={tool} prevToolAgent={prevToolAgent} />;
-      default:
-        console.log(`Unknown BSC market tool: ${toolName}`);
-        return <pre className="whitespace-pre-wrap">{JSON.stringify(tool, null, 2)}</pre>;
-    }
-  }
-
-  // Handle BSC liquidity tools
-  if (toolAgent === 'bscliquidity') {
-    switch (toolName) {
-      case BSC_GET_POOLS_NAME:
-        return <BscGetPools tool={tool} prevToolAgent={prevToolAgent} />;
-      default:
-        console.log(`Unknown BSC liquidity tool: ${toolName}`);
-        return <pre className="whitespace-pre-wrap">{JSON.stringify(tool, null, 2)}</pre>;
-    }
-  }
-
-  // Handle BSC trading tools
-  if (toolAgent === 'bsctrading') {
-    switch (toolName) {
-      case BSC_GET_WALLET_ADDRESS_NAME:
-        return <BscGetWalletAddress tool={tool} prevToolAgent={prevToolAgent} />;
-      case BSC_TRADE_NAME:
-        return <BscTrade tool={tool} prevToolAgent={prevToolAgent} />;
-      default:
-        console.log(`Unknown BSC trading tool: ${toolName}`);
-        return <pre className="whitespace-pre-wrap">{JSON.stringify(tool, null, 2)}</pre>;
-    }
-  }
-
-  // Handle Base token analysis tools
-  if (toolAgent === 'basetokenanalysis') {
-    switch (toolName) {
-      case BASE_BUBBLE_MAPS_NAME:
-        return <BaseBubbleMaps tool={tool} prevToolAgent={prevToolAgent} />;
-      case BASE_TOP_HOLDERS_NAME:
-        return <BaseTopHolders tool={tool} prevToolAgent={prevToolAgent} />;
-      case BASE_PRICE_CHART_NAME:
-        return <BasePriceChart tool={tool} prevToolAgent={prevToolAgent} />;
-      case BASE_GET_TOKEN_DATA_NAME:
-        return <BaseGetTokenData tool={tool} prevToolAgent={prevToolAgent} />;
-      case BASE_GET_TOKEN_ADDRESS_NAME:
-        return <BaseGetTokenAddress tool={tool} prevToolAgent={prevToolAgent} />;
-      case BASE_TOKEN_HOLDERS_NAME:
-        return <BaseTokenHolders tool={tool} prevToolAgent={prevToolAgent} />;
-      case BASE_TOKEN_TOP_TRADERS_NAME:
-        return <BaseTopTraders tool={tool} prevToolAgent={prevToolAgent} />;
-      default:
-        console.log(`Unknown Base tool: ${toolName}`);
-        return <pre className="whitespace-pre-wrap">{JSON.stringify(tool, null, 2)}</pre>;
-    }
-  }
-
-  // Handle Base market tools
-  if (toolAgent === 'basemarket') {
-    switch (toolName) {
-      case BASE_GET_TRENDING_TOKENS_NAME:
-        return <BaseGetTrendingTokens tool={tool} prevToolAgent={prevToolAgent} />;
-      case BASE_GET_TOP_TRADERS_NAME:
-        return <BaseGetTopTraders tool={tool} prevToolAgent={prevToolAgent} />;
-      case BASE_GET_TRADER_TRADES_NAME:
-        return <BaseGetTrades tool={tool} prevToolAgent={prevToolAgent} />;
-      default:
-        console.log(`Unknown Base market tool: ${toolName}`);
-        return <pre className="whitespace-pre-wrap">{JSON.stringify(tool, null, 2)}</pre>;
-    }
-  }
-
-  // Handle Base wallet tools
-  if (toolAgent === 'basewallet') {
-    switch (toolName) {
-      case BASE_GET_WALLET_ADDRESS_NAME:
-        return <BaseGetWalletAddress tool={tool} prevToolAgent={prevToolAgent} />;
-      case BASE_BALANCE_NAME:
-        return <GetBalance tool={tool} prevToolAgent={prevToolAgent} />;
-      case BASE_ALL_BALANCES_NAME:
-        return <GetBaseAllBalances tool={tool} prevToolAgent={prevToolAgent} />;
-      case BASE_TRANSFER_NAME:
-        return <BaseTransfer tool={tool} prevToolAgent={prevToolAgent} />;
-      default:
-        console.log(`Unknown Base wallet tool: ${toolName}`);
-        return <pre className="whitespace-pre-wrap">{JSON.stringify(tool, null, 2)}</pre>;
-    }
-  }
-
-  // Handle Base liquidity tools
-  if (toolAgent === 'baseliquidity') {
-    switch (toolName) {
-      case BASE_GET_POOLS_NAME:
-        return <BaseGetPools tool={tool} prevToolAgent={prevToolAgent} />;
-      default:
-        console.log(`Unknown Base liquidity tool: ${toolName}`);
-        return <pre className="whitespace-pre-wrap">{JSON.stringify(tool, null, 2)}</pre>;
-    }
-  }
-
-  // Handle Base trading tools
-  if (toolAgent === 'basetrading') {
-    switch (toolName) {
-      case BASE_GET_WALLET_ADDRESS_NAME:
-        return <BaseGetWalletAddress tool={tool} prevToolAgent={prevToolAgent} />;
-      case BASE_TRADE_NAME:
-        return <BaseTrade tool={tool} prevToolAgent={prevToolAgent} />;
-      default:
-        console.log(`Unknown Base trading tool: ${toolName}`);
-        return <pre className="whitespace-pre-wrap">{JSON.stringify(tool, null, 2)}</pre>;
-    }
-  }
-
-  // Handle Staking tools
-  if (toolAgent === 'staking') {
-    switch (toolName) {
-      case SOLANA_STAKE_ACTION:
-        return <Stake tool={tool} prevToolAgent={prevToolAgent} />;
-      case SOLANA_UNSTAKE_ACTION:
-        return <Unstake tool={tool} prevToolAgent={prevToolAgent} />;
-      case SOLANA_LIQUID_STAKING_YIELDS_ACTION:
-        return <LiquidStakingYields tool={tool} prevToolAgent={prevToolAgent} />;
-      case SOLANA_GET_TOKEN_ADDRESS_ACTION:
-        return <GetTokenAddress tool={tool} prevToolAgent={prevToolAgent} />;
-      case SOLANA_GET_WALLET_ADDRESS_ACTION:
-        return <GetWalletAddress tool={tool} prevToolAgent={prevToolAgent} />;
-      case SOLANA_BALANCE_ACTION:
-        return <Balance tool={tool} prevToolAgent={prevToolAgent} />;
-      case SOLANA_TRADE_ACTION:
-        return <Trade tool={tool} prevToolAgent={prevToolAgent} />;
-      default:
-        console.log(`Unknown staking tool: ${toolName}`);
-        return <pre className="whitespace-pre-wrap">{JSON.stringify(tool, null, 2)}</pre>;
-    }
-  }
-
-  // Handle Lending tools
-  if (toolAgent === 'lending') {
-    switch (toolName) {
-      case SOLANA_LENDING_YIELDS_ACTION:
-        return <LendingYieldsTool tool={tool} prevToolAgent={prevToolAgent} />;
-      case SOLANA_LEND_ACTION:
-        return <LendTool tool={tool} prevToolAgent={prevToolAgent} />;
-      case SOLANA_WITHDRAW_ACTION:
-        return <WithdrawCallBody tool={tool} args={tool.args} prevToolAgent={prevToolAgent} />;
-      case SOLANA_GET_TOKEN_ADDRESS_ACTION:
-        return <GetTokenAddress tool={tool} prevToolAgent={prevToolAgent} />;
-      case SOLANA_GET_WALLET_ADDRESS_ACTION:
-        return <GetWalletAddress tool={tool} prevToolAgent={prevToolAgent} />;
-      case SOLANA_BALANCE_ACTION:
-        return <Balance tool={tool} prevToolAgent={prevToolAgent} />;
-      case SOLANA_TRADE_ACTION:
-        return <Trade tool={tool} prevToolAgent={prevToolAgent} />;
-      default:
-        console.log(`Unknown lending tool: ${toolName}`);
-        return <pre className="whitespace-pre-wrap">{JSON.stringify(tool, null, 2)}</pre>;
-    }
-  }
-
-  // Handle Solana tools
-  switch (toolName) {
-    case SOLANA_BALANCE_ACTION:
-      return <Balance tool={tool} prevToolAgent={prevToolAgent} />;
-    case SOLANA_GET_WALLET_ADDRESS_ACTION:
-      return <GetWalletAddress tool={tool} prevToolAgent={prevToolAgent} />;
-    case SOLANA_GET_TRENDING_TOKENS_NAME:
-      return <GetTrendingTokens tool={tool} prevToolAgent={prevToolAgent} />;
-    case SOLANA_GET_TOKEN_DATA_NAME:
-      return <GetTokenData tool={tool} prevToolAgent={prevToolAgent} />;
-    case SOLANA_TRADE_ACTION:
-      return <Trade tool={tool} prevToolAgent={prevToolAgent} />;
-    case SOLANA_LENDING_YIELDS_ACTION:
-      return <LendingYieldsTool tool={tool} prevToolAgent={prevToolAgent} />;
-    case SOLANA_LEND_ACTION:
-      return <LendTool tool={tool} prevToolAgent={prevToolAgent} />;
-    case SOLANA_WITHDRAW_ACTION:
-      return <WithdrawCallBody tool={tool} args={tool.args} prevToolAgent={prevToolAgent} />;
-    case SOLANA_LIQUID_STAKING_YIELDS_ACTION:
-      return <LiquidStakingYields tool={tool} prevToolAgent={prevToolAgent} />;
-    case SOLANA_TRANSFER_NAME:
-      return <SolanaTransfer tool={tool} prevToolAgent={prevToolAgent} />;
-    case TWITTER_SEARCH_RECENT_NAME:
-      return <SearchRecentTweets tool={tool} />;
-    case SOLANA_STAKE_ACTION:
-      return <Stake tool={tool} prevToolAgent={prevToolAgent} />;
-    case SOLANA_UNSTAKE_ACTION:
-      return <Unstake tool={tool} prevToolAgent={prevToolAgent} />;
-    case SOLANA_ALL_BALANCES_NAME:
-      return <AllBalances tool={tool} prevToolAgent={prevToolAgent} />;
-    case SEARCH_KNOWLEDGE_NAME:
-      return <SearchKnowledge tool={tool} prevToolAgent={prevToolAgent} />;
-    case INVOKE_AGENT_NAME:
-      return <InvokeAgent tool={tool} prevToolAgent={prevToolAgent} />;
-    case SOLANA_GET_TOKEN_ADDRESS_ACTION:
-      return <GetTokenAddress tool={tool} prevToolAgent={prevToolAgent} />;
-    case SOLANA_TOP_HOLDERS_NAME:
-      return <GetTopHolders tool={tool} prevToolAgent={prevToolAgent} />;
-    case SOLANA_BUBBLE_MAPS_NAME:
-      return <SolanaBubbleMaps tool={tool} prevToolAgent={prevToolAgent} />;
-    case SOLANA_TOKEN_HOLDERS_NAME:
-      return <NumHolders tool={tool} prevToolAgent={prevToolAgent} />;
-    case SOLANA_GET_POOLS_NAME:
-      return <SolanaGetPools tool={tool} prevToolAgent={prevToolAgent} />;
-    case SOLANA_DEPOSIT_LIQUIDITY_NAME:
-      return <DepositLiquidity tool={tool} prevToolAgent={prevToolAgent} />;
-    case SOLANA_GET_LP_TOKENS_NAME:
-      return <GetLpTokens tool={tool} prevToolAgent={prevToolAgent} />;
-    case SOLANA_WITHDRAW_LIQUIDITY_NAME:
-      return <WithdrawLiquidity tool={tool} prevToolAgent={prevToolAgent} />;
-    case SOLANA_GET_TOP_TRADERS_NAME:
-      return <GetTopTraders tool={tool} prevToolAgent={prevToolAgent} />;
-    case SOLANA_GET_TRADER_TRADES_NAME:
-      return <GetTrades tool={tool} prevToolAgent={prevToolAgent} />;
-    case SOLANA_TOKEN_TOP_TRADERS_NAME:
-      return <GetTopTokenTraders tool={tool} prevToolAgent={prevToolAgent} />;
-    case SOLANA_TOKEN_PRICE_CHART_NAME:
-      return <PriceChart tool={tool} prevToolAgent={prevToolAgent} />;
-    case BSC_GET_KNOWLEDGE_NAME:
-      return <GetKnowledge tool={tool} prevToolAgent={prevToolAgent} />;
-    default:
-      return <pre className="whitespace-pre-wrap">{JSON.stringify(tool, null, 2)}</pre>;
-  }
+  return <pre className="whitespace-pre-wrap">{JSON.stringify(tool, null, 2)}</pre>;
 };
 
 export default ToolInvocation;

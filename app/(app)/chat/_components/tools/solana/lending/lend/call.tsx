@@ -28,10 +28,15 @@ interface Props {
  * Handles variations like "Kamino Lend", "Kamino", "kamino-lend", "Kamino-Lend"
  */
 const normalizeProtocolName = (protocol: string): string => {
-  return protocol
-    .toLowerCase()
-    .replace(/[-\s]+/g, '') // Remove hyphens and spaces
-    .trim();
+  const lowered = protocol.toLowerCase().trim();
+  let normalized = '';
+  for (const char of lowered) {
+    if (char === '-' || char === ' ' || char === '\t' || char === '\n') {
+      continue;
+    }
+    normalized += char;
+  }
+  return normalized;
 };
 
 /**
@@ -225,14 +230,8 @@ const LendCallBody: React.FC<Props> = ({ toolCallId, args }) => {
         },
       });
     } catch (error) {
-      // Check if user cancelled the transaction
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const isUserCancellation =
-        errorMessage.toLowerCase().includes('user rejected') ||
-        errorMessage.toLowerCase().includes('user cancelled') ||
-        errorMessage.toLowerCase().includes('user denied') ||
-        errorMessage.toLowerCase().includes('rejected by user') ||
-        (error as any)?.code === 4001;
+      const errorCode = (error as any)?.code;
+      const isUserCancellation = errorCode === 4001;
 
       if (isUserCancellation) {
         setIsLending(false);

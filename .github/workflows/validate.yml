@@ -1,0 +1,34 @@
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+
+      - name: Install Yarn
+        run: npm install -g yarn@1.22.22
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Validate router
+        run: yarn validate:router
+
+      - name: Validate intent
+        run: yarn validate:intent
+
+      - name: Validate pending actions
+        run: yarn validate:pending-actions

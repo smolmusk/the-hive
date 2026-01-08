@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useChat } from '@/app/(app)/chat/_contexts/chat';
 import { useChain } from '@/app/_contexts/chain-context';
 import { usePrivy } from '@privy-io/react-auth';
@@ -20,50 +20,13 @@ interface Props {
 }
 
 const LendingYieldsTool: React.FC<Props> = ({ tool, prevToolAgent }) => {
-  const { messages } = useChat();
-
-  const detectRequestedSymbol = (msgs: typeof messages) => {
-    const lastUserMessage = [...msgs].reverse().find((m) => m.role === 'user');
-    const content = typeof lastUserMessage?.content === 'string' ? lastUserMessage.content : '';
-    if (!content) return null;
-
-    const stableCoins = [
-      'USDC',
-      'USDT',
-      'USDC.E',
-      'USDT.E',
-      'USDX',
-      'USDS',
-      'USDG',
-      'USDCso',
-      'PYUSD',
-      'FDUSD',
-      'DAI',
-      'EUROe',
-      'EURC',
-    ];
-
-    const match = content.match(
-      /\b(USDC\.E|USDT\.E|USDCso|USDC|USDT|USDX|USDS|USDG|PYUSD|FDUSD|DAI|EUROe|EURC)\b/i,
-    );
-    if (!match) return null;
-    const symbol = match[1].toUpperCase();
-    return stableCoins.includes(symbol) ? symbol : null;
+  const args = (tool.args ?? {}) as {
+    tokenSymbol?: string;
+    protocol?: string;
+    limit?: number;
   };
-
-  const detectRequestedProvider = (msgs: typeof messages) => {
-    const lastUserMessage = [...msgs].reverse().find((m) => m.role === 'user');
-    const content = typeof lastUserMessage?.content === 'string' ? lastUserMessage.content : '';
-    if (!content) return null;
-    if (/jupiter\s+lend|jupiter\b/i.test(content)) return 'jupiter-lend';
-    if (/kamino\b/i.test(content)) return 'kamino-lend';
-    return null;
-  };
-
-  const requestedSymbolRef = useRef<string | null>(detectRequestedSymbol(messages));
-  const requestedSymbol = requestedSymbolRef.current;
-  const requestedProviderRef = useRef<string | null>(detectRequestedProvider(messages));
-  const requestedProvider = requestedProviderRef.current;
+  const requestedSymbol = args.tokenSymbol ? args.tokenSymbol.toUpperCase() : null;
+  const requestedProvider = args.protocol ? args.protocol.toLowerCase() : null;
 
   const loadingLabel = useMemo(() => {
     if (requestedSymbol && requestedProvider) {
@@ -146,15 +109,13 @@ const LendingYields: React.FC<{
   requestedSymbol?: string | null;
   requestedProvider?: string | null;
 }> = ({ body, requestedSymbol, requestedProvider }) => {
-  const { sendInternalMessage, isResponseLoading, messages } = useChat();
+  const { sendInternalMessage, isResponseLoading } = useChat();
   const { currentWalletAddress, setCurrentChain } = useChain();
   const { login } = usePrivy();
   const [selectedPool, setSelectedPool] = useState<LendingYieldsPoolData | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDisabled, setIsDisabled] = useState(true);
   const [pendingPoolId, setPendingPoolId] = useState<string | null>(null);
-  const hasAutoSelectedRef = useRef(false);
-  const [autoSelected, setAutoSelected] = useState(false);
 
   useEffect(() => {
     if (!body) return;
@@ -164,62 +125,8 @@ const LendingYields: React.FC<{
     }
   }, [body]);
 
-  const detectRequestedSymbol = (msgs: typeof messages) => {
-    const lastUserMessage = [...msgs].reverse().find((m) => m.role === 'user');
-    const content = typeof lastUserMessage?.content === 'string' ? lastUserMessage.content : '';
-    if (!content) return null;
-
-    const stableCoins = [
-      'USDC',
-      'USDT',
-      'USDC.E',
-      'USDT.E',
-      'USDX',
-      'USDS',
-      'USDG',
-      'USDCso',
-      'PYUSD',
-      'FDUSD',
-      'DAI',
-      'EUROe',
-      'EURC',
-    ];
-
-    const match = content.match(
-      /\b(USDC\.E|USDT\.E|USDCso|USDC|USDT|USDX|USDS|USDG|PYUSD|FDUSD|DAI|EUROe|EURC)\b/i,
-    );
-    if (!match) return null;
-    const symbol = match[1].toUpperCase();
-    return stableCoins.includes(symbol) ? symbol : null;
-  };
-
-  const requestedSymbolRef = useRef<string | null>(
-    requestedSymbol ?? detectRequestedSymbol(messages),
-  );
-  const symbolToFilter = requestedSymbolRef.current;
-
-  const detectRequestedProvider = (msgs: typeof messages) => {
-    const lastUserMessage = [...msgs].reverse().find((m) => m.role === 'user');
-    const content = typeof lastUserMessage?.content === 'string' ? lastUserMessage.content : '';
-    if (!content) return null;
-    if (/jupiter\s+lend|jupiter\b/i.test(content)) return 'jupiter-lend';
-    if (/kamino\b/i.test(content)) return 'kamino-lend';
-    return null;
-  };
-
-  const requestedProviderRef = useRef<string | null>(
-    requestedProvider ?? detectRequestedProvider(messages),
-  );
-  const providerToFilter = requestedProviderRef.current;
-  const wantsAllPoolsRef = useRef<boolean | null>(null);
-  if (wantsAllPoolsRef.current === null) {
-    const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
-    const content = typeof lastUserMessage?.content === 'string' ? lastUserMessage.content : '';
-    wantsAllPoolsRef.current = /\b(all|every|entire|full\s+list|show\s+all|fetch\s+all|list\s+all)\b/i.test(
-      content || '',
-    );
-  }
-  const wantsAllPools = wantsAllPoolsRef.current;
+  const symbolToFilter = requestedSymbol ? requestedSymbol.toUpperCase() : null;
+  const providerToFilter = requestedProvider ? requestedProvider.toLowerCase() : null;
 
   const poolsToShow = useMemo(() => {
     if (!body) return [];
@@ -239,15 +146,8 @@ const LendingYields: React.FC<{
 
   const displayPools = useMemo(() => {
     if (!poolsToShow) return [];
-    if (wantsAllPools) return poolsToShow;
-    if (poolsToShow.length <= 3) return poolsToShow;
-    const [best, second, ...rest] = poolsToShow
-      .slice()
-      .sort((a, b) => (b.yield || 0) - (a.yield || 0));
-    const third = rest[0];
-    const trio = [second ?? best, best, third ?? second ?? best].filter(Boolean);
-    return trio.slice(0, 3) as typeof poolsToShow;
-  }, [poolsToShow, wantsAllPools]);
+    return poolsToShow;
+  }, [poolsToShow]);
 
   const highlightIndex = useMemo(() => {
     if (!displayPools.length) return 0;
@@ -284,7 +184,7 @@ const LendingYields: React.FC<{
         `I want to lend ${symbol} (${tokenAddress}) to ${capitalizeWords(poolData.project)}`,
       );
     },
-    [isResponseLoading, sendInternalMessage],
+    [currentWalletAddress, isResponseLoading, login, sendInternalMessage, setCurrentChain],
   );
 
   const handleMoreDetailsClick = (poolData: LendingYieldsPoolData, event: React.MouseEvent) => {
@@ -301,71 +201,24 @@ const LendingYields: React.FC<{
     }
   }, [isResponseLoading]);
 
-  useEffect(() => {
-    if (!poolsToShow || !poolsToShow.length) return;
-    if (hasAutoSelectedRef.current) return;
-    if (isResponseLoading) return;
-
-    const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
-    const content = typeof lastUserMessage?.content === 'string' ? lastUserMessage.content : '';
-    if (!content) return;
-
-    const match =
-      content.match(
-        /lend\s+(?:[0-9.,]+\s+)?([A-Za-z0-9]+)\s+(?:to|using)\s+([A-Za-z0-9\s]+?)(?:\.|$)/i,
-      ) || null;
-
-    if (!match) return;
-
-    const [, tokenSymbolRaw, protocolRaw] = match;
-    const tokenSymbol = tokenSymbolRaw.toUpperCase();
-    const protocol = protocolRaw.trim().toLowerCase();
-    const supportedStablecoins = ['USDC', 'USDT', 'USDG', 'EURC', 'FDUSD', 'PYUSD', 'USDS', 'USDY'];
-
-    if (!supportedStablecoins.includes(tokenSymbol)) return;
-
-    const matchingPool = poolsToShow.find((pool) => {
-      const poolSymbol = (pool.symbol || '').toUpperCase();
-      const project = (pool.project || '').toLowerCase();
-      const projectMatches =
-        project.includes(protocol) ||
-        protocol.includes(project) ||
-        (project.includes('jupiter') && protocol.includes('jupiter'));
-
-      return poolSymbol === tokenSymbol && projectMatches;
-    });
-
-    if (!matchingPool) return;
-
-    hasAutoSelectedRef.current = true;
-    setAutoSelected(true);
-    handleLendClick(matchingPool);
-  }, [poolsToShow, messages, isResponseLoading, handleLendClick]);
-
-  if (autoSelected && requestedSymbol) {
-    return null;
-  }
-
   return (
     <>
-      {!autoSelected && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4 mt-4">
-          {displayPools?.map((pool, index) => (
-            <PoolDetailsCard
-              key={`${pool.name}-${pool.project}-${index}`}
-              pool={pool}
-              index={index}
-              highlightIndex={highlightIndex}
-              onClick={handleLendClick}
-              onMoreDetailsClick={handleMoreDetailsClick}
-              disabled={isDisabled}
-              isPending={
-                pendingPoolId === (pool.tokenMintAddress || pool.tokenData?.id || pool.name)
-              }
-            />
-          ))}
-        </div>
-      )}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4 mt-4">
+        {displayPools?.map((pool, index) => (
+          <PoolDetailsCard
+            key={`${pool.name}-${pool.project}-${index}`}
+            pool={pool}
+            index={index}
+            highlightIndex={highlightIndex}
+            onClick={handleLendClick}
+            onMoreDetailsClick={handleMoreDetailsClick}
+            disabled={isDisabled}
+            isPending={
+              pendingPoolId === (pool.tokenMintAddress || pool.tokenData?.id || pool.name)
+            }
+          />
+        ))}
+      </div>
 
       <PoolDetailsModal
         pool={selectedPool}

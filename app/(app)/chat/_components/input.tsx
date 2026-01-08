@@ -3,7 +3,22 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { ArrowUp } from 'lucide-react';
 import Textarea from 'react-textarea-autosize';
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider, Button } from '@/components/ui';
+import {
+  Badge,
+  Button,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from '@/components/ui';
 import { useEnterSubmit } from '../_hooks';
 import { useChat } from '../_contexts/chat';
 import { cn } from '@/lib/utils';
@@ -17,7 +32,16 @@ const PROMPT_POOL = [
 ];
 
 const ChatInput: React.FC = () => {
-  const { input, setInput, onSubmit, inputDisabledMessage, isLoading, messages } = useChat();
+  const {
+    input,
+    setInput,
+    onSubmit,
+    inputDisabledMessage,
+    isLoading,
+    messages,
+    memory,
+    updateUserPrefs,
+  } = useChat();
   const { onKeyDown } = useEnterSubmit({
     onSubmit: () => {
       if (isLoading || inputDisabledMessage !== '') return;
@@ -45,6 +69,19 @@ const ChatInput: React.FC = () => {
   const tipPrompt = rotatedPrompts[0] || 'Ask the hive anything...';
   const hasMessages = (messages || []).length > 0;
   const placeholder = hasMessages ? 'Ask the hive anything...' : `Tip: ${tipPrompt}`;
+  const userPrefs = memory?.userPrefs ?? {};
+  const stablecoinOnly = Boolean(userPrefs?.stablecoinOnly);
+  const riskPref = userPrefs?.risk;
+  const timeHorizonPref = userPrefs?.timeHorizon;
+  const formatPref = (value?: string) => (value ? value[0]?.toUpperCase() + value.slice(1) : null);
+  const timeHorizonLabel = formatPref(timeHorizonPref);
+  const riskLabel = formatPref(riskPref);
+  const handleRiskChange = (value: 'any' | 'low' | 'medium' | 'high') => {
+    updateUserPrefs({ risk: value === 'any' ? undefined : value });
+  };
+  const handleHorizonChange = (value: 'any' | 'short' | 'medium' | 'long') => {
+    updateUserPrefs({ timeHorizon: value === 'any' ? undefined : value });
+  };
 
   useEffect(() => {
     if (!isLoading && inputRef.current) {
@@ -54,6 +91,87 @@ const ChatInput: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-1 w-full">
+      <div className="flex flex-wrap items-center gap-2 px-1 text-xs text-neutral-500">
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button size="sm" variant="ghost" className="h-7 px-3">
+              Preferences
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-72">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-neutral-700 dark:text-neutral-200">
+                  Stablecoin only
+                </span>
+                <Button
+                  size="sm"
+                  variant={stablecoinOnly ? 'brandOutline' : 'outline'}
+                  className="h-7 px-3"
+                  onClick={() =>
+                    updateUserPrefs({ stablecoinOnly: stablecoinOnly ? undefined : true })
+                  }
+                >
+                  {stablecoinOnly ? 'On' : 'Off'}
+                </Button>
+              </div>
+              <div className="flex flex-col gap-2">
+                <span className="text-sm font-medium text-neutral-700 dark:text-neutral-200">
+                  Risk
+                </span>
+                <Select
+                  value={riskPref ?? 'any'}
+                  onValueChange={(value) =>
+                    handleRiskChange(value as 'any' | 'low' | 'medium' | 'high')
+                  }
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Any" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="any">Any</SelectItem>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-2">
+                <span className="text-sm font-medium text-neutral-700 dark:text-neutral-200">
+                  Time horizon
+                </span>
+                <Select
+                  value={timeHorizonPref ?? 'any'}
+                  onValueChange={(value) =>
+                    handleHorizonChange(value as 'any' | 'short' | 'medium' | 'long')
+                  }
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Any" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="any">Any</SelectItem>
+                    <SelectItem value="short">Short</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="long">Long</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 justify-start px-0 text-neutral-500"
+                onClick={() => updateUserPrefs(null)}
+              >
+                Reset preferences
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+        {stablecoinOnly ? <Badge variant="brandOutline">Stablecoins only</Badge> : null}
+        {riskLabel ? <Badge variant="secondary">Risk: {riskLabel}</Badge> : null}
+        {timeHorizonLabel ? <Badge variant="secondary">Horizon: {timeHorizonLabel}</Badge> : null}
+      </div>
       <form
         onSubmit={(e) => {
           e.preventDefault();

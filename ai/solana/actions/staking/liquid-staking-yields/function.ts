@@ -4,15 +4,121 @@ import { getTokenBySymbol } from '@/db/services';
 
 import type { LiquidStakingYieldsResultBodyType } from './types';
 import type { SolanaActionResult } from '../../solana-action';
+import { LiquidStakingYieldsInputSchema } from './input-schema';
+import { z } from 'zod';
+
+const DEFAULT_LIMIT = 3;
+
+const normalizeProtocol = (value?: string | null) => {
+  if (!value) return null;
+  const normalized = value.toLowerCase().replace(/\s+/g, '-');
+  if (normalized.includes('jito')) return 'jito-liquid-staking';
+  if (normalized.includes('marinade')) return 'marinade-liquid-staking';
+  if (normalized.includes('drift')) return 'drift-staked-sol';
+  if (normalized.includes('binance')) return 'binance-staked-sol';
+  if (normalized.includes('bybit')) return 'bybit-staked-sol';
+  if (normalized.includes('helius')) return 'helius-staked-sol';
+  if (normalized.includes('jupiter')) return 'jupiter-staked-sol';
+  if (normalized.includes('sanctum')) return 'sanctum';
+  if (normalized.includes('lido')) return 'lido';
+  if (normalized.includes('blaze')) return 'blazestake';
+  return normalized;
+};
+
+const applyFilters = (
+  pools: LiquidStakingYieldsResultBodyType,
+  args: z.infer<typeof LiquidStakingYieldsInputSchema> | undefined,
+) => {
+  if (!args || !pools) return pools;
+
+  const symbol = args.tokenSymbol ? args.tokenSymbol.toUpperCase() : null;
+  const protocol = normalizeProtocol(args.protocol);
+  let filtered = pools;
+
+  const matchesProtocol = (project?: string | null) => {
+    if (!protocol) return true;
+    const normalizedProject = (project || '').toLowerCase();
+    return normalizedProject.includes(protocol);
+  };
+
+  if (symbol) {
+    const bySymbol = filtered.filter((pool) => (pool.symbol || '').toUpperCase() === symbol);
+    filtered = bySymbol.length ? bySymbol : filtered;
+  }
+
+  if (protocol) {
+    const byProtocol = filtered.filter((pool) => matchesProtocol(pool.project));
+    filtered = byProtocol.length ? byProtocol : filtered;
+  }
+
+  return filtered;
+};
+
+const applyLimit = (
+  pools: LiquidStakingYieldsResultBodyType,
+  args: z.infer<typeof LiquidStakingYieldsInputSchema> | undefined,
+) => {
+  if (!pools) return pools;
+  const requestedLimit = args?.limit;
+  const limit =
+    requestedLimit && Number.isFinite(requestedLimit)
+      ? Math.max(1, Math.min(requestedLimit, 50))
+      : DEFAULT_LIMIT;
+  return pools.slice(0, limit);
+};
+
+const buildPreferenceScorer = (
+  args: z.infer<typeof LiquidStakingYieldsInputSchema> | undefined,
+) => {
+  const risk = args?.risk;
+  const timeHorizon = args?.timeHorizon;
+  if (!risk && !timeHorizon) return null;
+
+  let apyWeight = 1.2;
+  let tvlWeight = 0.2;
+
+  if (risk === 'low') {
+    apyWeight = 0.8;
+    tvlWeight = 0.7;
+  } else if (risk === 'high') {
+    apyWeight = 1.6;
+    tvlWeight = 0.1;
+  } else if (risk === 'medium') {
+    apyWeight = 1.2;
+    tvlWeight = 0.25;
+  }
+
+  if (timeHorizon === 'short') {
+    apyWeight += 0.4;
+  } else if (timeHorizon === 'long') {
+    tvlWeight += 0.25;
+  }
+
+  return (pool: any) => {
+    const apy = Number(pool?.yield ?? pool?.apy ?? 0);
+    const tvl = Number(pool?.tvlUsd ?? 0);
+    const tvlScore = Math.log10(Math.max(1, tvl + 1));
+    return apyWeight * apy + tvlWeight * tvlScore;
+  };
+};
+
+const applyPreferenceSort = (
+  pools: LiquidStakingYieldsResultBodyType,
+  args: z.infer<typeof LiquidStakingYieldsInputSchema> | undefined,
+) => {
+  const scorer = buildPreferenceScorer(args);
+  if (!scorer) return pools;
+  return [...pools].sort((a, b) => scorer(b) - scorer(a));
+};
 
 /**
  * Gets the best liquid staking yields from Staking Rewards API.
  *
  * @returns A message containing the best liquid staking yields information
  */
-export async function getLiquidStakingYields(): Promise<
-  SolanaActionResult<LiquidStakingYieldsResultBodyType>
-> {
+export async function getLiquidStakingYields(
+  args?: z.infer<typeof LiquidStakingYieldsInputSchema>,
+): Promise<SolanaActionResult<LiquidStakingYieldsResultBodyType>> {
   try {
     const response = await getBestLiquidStaking();
 
@@ -68,22 +174,11 @@ export async function getLiquidStakingYields(): Promise<
       };
     }
 
-    // Sort by APY (highest first) and take top 3
-    const topSolanaPools = solLiquidStakingPools
-      .sort((a, b) => (b.apy || 0) - (a.apy || 0))
-      .slice(0, 3);
-
-    // Reorder so highest APY is in the center (index 1)
-    if (topSolanaPools.length === 3) {
-      const [highest, second, third] = topSolanaPools;
-      topSolanaPools[0] = second; // Second highest on left
-      topSolanaPools[1] = highest; // Highest APY in center
-      topSolanaPools[2] = third; // Third highest on right
-    }
+    const sortedPools = solLiquidStakingPools.sort((a, b) => (b.apy || 0) - (a.apy || 0));
 
     // Transform to the expected format
     const body = await Promise.all(
-      topSolanaPools.map(async (pool) => {
+      sortedPools.map(async (pool) => {
         const tokenData = await getTokenBySymbol(pool.symbol);
         return {
           name: pool.symbol,
@@ -103,9 +198,28 @@ export async function getLiquidStakingYields(): Promise<
       }),
     );
 
+    const filteredBody = applyFilters(body, args);
+    const rankedBody = applyPreferenceSort(filteredBody, args);
+    const limitedBody = applyLimit(rankedBody, args);
+
+    if (limitedBody && limitedBody.length === 3) {
+      const scorer = buildPreferenceScorer(args);
+      const sortedByScore = limitedBody
+        .slice()
+        .sort((a, b) =>
+          scorer ? scorer(b) - scorer(a) : (b.yield || 0) - (a.yield || 0),
+        );
+      const [highest, second, third] = sortedByScore;
+      if (highest && second && third) {
+        limitedBody[0] = second;
+        limitedBody[1] = highest;
+        limitedBody[2] = third;
+      }
+    }
+
     return {
       message: `Top pools are displayed as cards above. Do NOT list or repeat them in text—ask the user to pick a provider card to continue staking.`,
-      body,
+      body: limitedBody,
     };
   } catch (error) {
     console.error(error);

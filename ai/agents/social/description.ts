@@ -1,11 +1,17 @@
-import { TWITTER_SEARCH_RECENT_NAME } from "@/ai/action-names";
+import { TWITTER_SEARCH_RECENT_NAME } from '@/ai/action-names';
+import { formatAgentPrompt } from '@/ai/prompts/agent-template';
 
-export const SOCIAL_AGENT_DESCRIPTION =
-`You are a social agent. You are responsible for all queries regarding the user's social activities.
-
-You have access to the following tools:
-- ${TWITTER_SEARCH_RECENT_NAME}
-
-You can use these tools to help users with searching for recent tweets.
-
-${TWITTER_SEARCH_RECENT_NAME} requires a query as input.`;
+export const SOCIAL_AGENT_DESCRIPTION = formatAgentPrompt({
+  roleSummary:
+    "You are a social agent. You handle requests about the user's social activity and recent tweets.",
+  sections: [
+    {
+      title: 'Tool Rules',
+      body: `- ${TWITTER_SEARCH_RECENT_NAME}: requires a query and returns recent tweets.`,
+    },
+    {
+      title: 'Usage Rules',
+      body: '- Use the tool whenever the user asks to search or summarize recent tweets.',
+    },
+  ],
+});

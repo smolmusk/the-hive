@@ -5,21 +5,127 @@ import { getJupiterPools } from '@/services/lending/get-jupiter-pools';
 import { getTokenBySymbol } from '@/db/services/tokens';
 import { LendingYieldsResultBodyType } from './schema';
 import { capitalizeWords } from '@/lib/string-utils';
+import { LendingYieldsInputSchema } from './input-schema';
+import { z } from 'zod';
 
 let cachedLendingYields: {
   timestamp: number;
-  result: SolanaActionResult<LendingYieldsResultBodyType>;
+  pools: LendingYieldsResultBodyType;
 } | null = null;
 
 const LENDING_YIELDS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const DEFAULT_LIMIT = 3;
 
-export async function getLendingYields(): Promise<SolanaActionResult<LendingYieldsResultBodyType>> {
+const normalizeProtocol = (value?: string | null) => {
+  if (!value) return null;
+  const normalized = value.toLowerCase().replace(/\s+/g, '-');
+  if (normalized.includes('jupiter')) return 'jupiter-lend';
+  if (normalized.includes('kamino')) return 'kamino-lend';
+  if (normalized.includes('marginfi')) return 'marginfi';
+  if (normalized.includes('maple')) return 'maple';
+  if (normalized.includes('save')) return 'save';
+  return normalized;
+};
+
+const applyFilters = (
+  pools: LendingYieldsResultBodyType,
+  args: z.infer<typeof LendingYieldsInputSchema> | undefined,
+) => {
+  if (!args) return pools;
+
+  const symbol = args.tokenSymbol ? args.tokenSymbol.toUpperCase() : null;
+  const protocol = normalizeProtocol(args.protocol);
+  let filtered = pools;
+
+  const matchesProtocol = (project?: string | null) => {
+    if (!protocol) return true;
+    const normalizedProject = (project || '').toLowerCase();
+    if (protocol === 'jupiter-lend') {
+      return normalizedProject.includes('jupiter-lend') || normalizedProject.includes('jup-lend');
+    }
+    return normalizedProject.includes(protocol);
+  };
+
+  if (symbol) {
+    const bySymbol = filtered.filter((pool) => (pool.symbol || '').toUpperCase() === symbol);
+    filtered = bySymbol.length ? bySymbol : filtered;
+  }
+
+  if (protocol) {
+    const byProtocol = filtered.filter((pool) => matchesProtocol(pool.project));
+    filtered = byProtocol.length ? byProtocol : filtered;
+  }
+
+  return filtered;
+};
+
+const applyLimit = (
+  pools: LendingYieldsResultBodyType,
+  args: z.infer<typeof LendingYieldsInputSchema> | undefined,
+) => {
+  const requestedLimit = args?.limit;
+  const limit =
+    requestedLimit && Number.isFinite(requestedLimit)
+      ? Math.max(1, Math.min(requestedLimit, 50))
+      : DEFAULT_LIMIT;
+  return pools.slice(0, limit);
+};
+
+const buildPreferenceScorer = (args: z.infer<typeof LendingYieldsInputSchema> | undefined) => {
+  const risk = args?.risk;
+  const timeHorizon = args?.timeHorizon;
+  if (!risk && !timeHorizon) return null;
+
+  let apyWeight = 1.2;
+  let tvlWeight = 0.2;
+
+  if (risk === 'low') {
+    apyWeight = 0.8;
+    tvlWeight = 0.7;
+  } else if (risk === 'high') {
+    apyWeight = 1.6;
+    tvlWeight = 0.1;
+  } else if (risk === 'medium') {
+    apyWeight = 1.2;
+    tvlWeight = 0.25;
+  }
+
+  if (timeHorizon === 'short') {
+    apyWeight += 0.4;
+  } else if (timeHorizon === 'long') {
+    tvlWeight += 0.25;
+  }
+
+  return (pool: any) => {
+    const apy = Number(pool?.yield ?? pool?.apy ?? 0);
+    const tvl = Number(pool?.tvlUsd ?? 0);
+    const tvlScore = Math.log10(Math.max(1, tvl + 1));
+    return apyWeight * apy + tvlWeight * tvlScore;
+  };
+};
+
+const applyPreferenceSort = (
+  pools: LendingYieldsResultBodyType,
+  args: z.infer<typeof LendingYieldsInputSchema> | undefined,
+) => {
+  const scorer = buildPreferenceScorer(args);
+  if (!scorer) return pools;
+  return [...pools].sort((a, b) => scorer(b) - scorer(a));
+};
+
+export async function getLendingYields(
+  args?: z.infer<typeof LendingYieldsInputSchema>,
+): Promise<SolanaActionResult<LendingYieldsResultBodyType>> {
   try {
     if (
       cachedLendingYields &&
       Date.now() - cachedLendingYields.timestamp < LENDING_YIELDS_CACHE_TTL_MS
     ) {
-      return cachedLendingYields.result;
+      const filtered = applyFilters(cachedLendingYields.pools, args);
+      return {
+        message: `Fetched lending yields`,
+        body: applyLimit(filtered, args),
+      };
     }
 
     const [defiLlamaResponse, kaminoPools, jupiterPools] = await Promise.all([
@@ -79,8 +185,8 @@ export async function getLendingYields(): Promise<SolanaActionResult<LendingYiel
           apyBase: pool.apyBase,
           apyReward: null,
           apy: pool.apy,
-      rewardTokens: [],
-      projectLogoURI: null,
+          rewardTokens: [],
+          projectLogoURI: null,
           poolMeta: null,
           url: null,
           underlyingTokens: [pool.mintAddress],
@@ -111,8 +217,8 @@ export async function getLendingYields(): Promise<SolanaActionResult<LendingYiel
         apyBase: pool.apyBase,
         apyReward: null,
         apy: pool.apy,
-      rewardTokens: [],
-      projectLogoURI: null,
+        rewardTokens: [],
+        projectLogoURI: null,
         poolMeta: pool.address ?? null,
         url: null,
         underlyingTokens: [pool.mintAddress],
@@ -203,34 +309,43 @@ export async function getLendingYields(): Promise<SolanaActionResult<LendingYiel
             pool.project === 'kamino-lend'
               ? '/logos/kamino.svg'
               : pool.project === 'jupiter-lend' || pool.project === 'jup-lend'
-              ? '/logos/jupiter.png'
-              : null,
+                ? '/logos/jupiter.png'
+                : null,
         };
       }),
     );
 
-    const bestPool =
-      selectedPools.reduce(
-        (best: any, current: any) => ((current.apy || 0) > (best.apy || 0) ? current : best),
-        selectedPools[0],
-      ) || null;
+    const filteredBody = applyFilters(body, args);
+    const rankedBody = applyPreferenceSort(filteredBody, args);
+    const limitedBody = applyLimit(rankedBody, args);
 
+    const scorer = buildPreferenceScorer(args);
+    const bestPool = limitedBody.length
+      ? limitedBody.reduce((best: any, current: any) => {
+          if (!scorer) {
+            return (current.yield || 0) > (best.yield || 0) ? current : best;
+          }
+          return scorer(current) > scorer(best) ? current : best;
+        }, limitedBody[0])
+      : null;
+
+    const bestLabel = scorer ? 'Top match' : 'Best yield';
     const bestSummary = bestPool
-      ? `Best yield: ${bestPool.symbol} via ${capitalizeWords(
+      ? `${bestLabel}: ${bestPool.symbol} via ${capitalizeWords(
           bestPool.project || '',
-        )} at ${(bestPool.apy || 0).toFixed(2)}% APY. `
+        )} at ${(bestPool.yield || 0).toFixed(2)}% APY. `
       : 'No yields available yet. ';
 
     const result: SolanaActionResult<LendingYieldsResultBodyType> = {
-      message: `${bestSummary}Found ${body.length} Solana lending pool${
-        body.length === 1 ? '' : 's'
+      message: `${bestSummary}Found ${limitedBody.length} Solana lending pool${
+        limitedBody.length === 1 ? '' : 's'
       }. Compare the cards (APY and TVL are shown in the UI) and pick the best fit to continue.\n\nText rules: keep to one short sentence, do NOT list pool names/symbols/APYs in text, do NOT mention other tokens unless the user asked for them, and if you suggest a different token for higher yield make it clear they must swap first. DO NOT CHECK BALANCES YET - wait for the user to select a specific pool first.`,
-      body,
+      body: limitedBody,
     };
 
     cachedLendingYields = {
       timestamp: Date.now(),
-      result,
+      pools: body,
     };
 
     return result;

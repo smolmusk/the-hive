@@ -19,38 +19,245 @@ import {
   BASE_LIQUIDITY_AGENT_NAME,
   BASE_TRADING_AGENT_NAME,
 } from '@/ai/agents/names';
+import {
+  SOLANA_BALANCE_ACTION,
+  SOLANA_GET_WALLET_ADDRESS_ACTION,
+  SOLANA_GET_TRENDING_TOKENS_NAME,
+  SOLANA_GET_TOKEN_DATA_NAME,
+  SOLANA_TRADE_ACTION,
+  SOLANA_LIQUID_STAKING_YIELDS_ACTION,
+  SOLANA_LENDING_YIELDS_ACTION,
+  SOLANA_LEND_ACTION,
+  SOLANA_WITHDRAW_ACTION,
+  SOLANA_TRANSFER_NAME,
+  SOLANA_STAKE_ACTION,
+  SOLANA_UNSTAKE_ACTION,
+  SOLANA_ALL_BALANCES_NAME,
+  SEARCH_KNOWLEDGE_NAME,
+  INVOKE_AGENT_NAME,
+  SOLANA_GET_TOKEN_ADDRESS_ACTION,
+  SOLANA_TOP_HOLDERS_NAME,
+  SOLANA_BUBBLE_MAPS_NAME,
+  SOLANA_TOKEN_HOLDERS_NAME,
+  SOLANA_GET_POOLS_NAME,
+  SOLANA_DEPOSIT_LIQUIDITY_NAME,
+  SOLANA_GET_LP_TOKENS_NAME,
+  SOLANA_WITHDRAW_LIQUIDITY_NAME,
+  SOLANA_GET_TOP_TRADERS_NAME,
+  SOLANA_GET_TRADER_TRADES_NAME,
+  SOLANA_TOKEN_TOP_TRADERS_NAME,
+  SOLANA_TOKEN_PRICE_CHART_NAME,
+  TWITTER_SEARCH_RECENT_NAME,
+  BSC_GET_KNOWLEDGE_NAME,
+  BSC_TRADE_NAME,
+  BASE_GET_KNOWLEDGE_NAME,
+  BASE_GET_TOKEN_DATA_NAME,
+  BASE_GET_WALLET_ADDRESS_NAME,
+  BASE_BALANCE_NAME,
+  BASE_ALL_BALANCES_NAME,
+  BASE_TRANSFER_NAME,
+  BASE_GET_TRENDING_TOKENS_NAME,
+  BASE_GET_TOP_TRADERS_NAME,
+  BASE_GET_TRADER_TRADES_NAME,
+  BASE_TRADE_NAME,
+} from '@/ai/action-names';
+import { BASE_BUBBLE_MAPS_NAME } from '@/ai/base/actions/token/bubble-maps/name';
+import { BASE_PRICE_CHART_NAME } from '@/ai/base/actions/token/price-chart/name';
+import { BASE_TOP_HOLDERS_NAME } from '@/ai/base/actions/token/top-holders/name';
+import { BASE_TOKEN_TOP_TRADERS_NAME } from '@/ai/base/actions/token/top-traders/name';
+import { BASE_GET_TOKEN_ADDRESS_NAME } from '@/ai/base/actions/token/get-token-address/name';
+import { BASE_TOKEN_HOLDERS_NAME } from '@/ai/base/actions/token/token-holders/name';
+import { BSC_BUBBLE_MAPS_NAME } from '@/ai/bsc/actions/token/bubble-maps/name';
+import { BSC_TOP_HOLDERS_NAME } from '@/ai/bsc/actions/token/top-holders/name';
+import { BSC_PRICE_CHART_NAME } from '@/ai/bsc/actions/token/price-chart/name';
+import { BSC_GET_TOKEN_DATA_NAME } from '@/ai/bsc/actions/token/get-token-data/name';
+import { BSC_GET_TOKEN_ADDRESS_NAME } from '@/ai/bsc/actions/token/get-token-address/name';
+import { BSC_TOKEN_HOLDERS_NAME } from '@/ai/bsc/actions/token/token-holders/name';
+import { BSC_TOKEN_TOP_TRADERS_NAME } from '@/ai/bsc/actions/token/top-traders/name';
+import { BSC_GET_TRADER_TRADES_NAME } from '@/ai/bsc/actions/market/get-trades/name';
+import { BSC_GET_TRENDING_TOKENS_NAME } from '@/ai/bsc/actions/market/get-trending-tokens/name';
+import { BSC_GET_TOP_TRADERS_NAME } from '@/ai/bsc/actions/market/get-top-traders/name';
+import { BSC_GET_WALLET_ADDRESS_NAME } from '@/ai/bsc/actions/wallet/get-wallet-address/name';
+import { BSC_BALANCE_NAME } from '@/ai/bsc/actions/wallet/balance/name';
+import { BSC_ALL_BALANCES_NAME } from '@/ai/bsc/actions/wallet/all-balances/name';
+import { BSC_TRANSFER_NAME } from '@/ai/bsc/actions/wallet/transfer/name';
+import { GET_POOLS_NAME as BASE_GET_POOLS_NAME } from '@/ai/base/actions/liquidity/get-pools/name';
+import { BSC_GET_POOLS_NAME } from '@/ai/bsc/actions/liquidity/names';
 
 import type { IconName } from '@/types';
 import type { ToolInvocation } from 'ai';
 
-export const toolToAgent = {
-  staking: STAKING_AGENT_NAME,
-  lending: LENDING_AGENT_NAME,
-  wallet: WALLET_AGENT_NAME,
-  market: MARKET_AGENT_NAME,
-  knowledge: KNOWLEDGE_AGENT_NAME,
-  trading: TRADING_AGENT_NAME,
-  social: SOCIAL_AGENT_NAME,
-  tokenanalysis: TOKEN_ANALYSIS_AGENT_NAME,
-  bsctokenanalysis: TOKEN_ANALYSIS_AGENT_NAME,
-  bscmarket: MARKET_AGENT_NAME,
-  bscwallet: BSC_WALLET_AGENT_NAME,
-  bscknowledge: BSC_KNOWLEDGE_AGENT_NAME,
-  liquidity: LIQUIDITY_AGENT_NAME,
-  bscliquidity: BSC_LIQUIDITY_AGENT_NAME,
-  bsctrading: BSC_TRADING_AGENT_NAME,
-  baseknowledge: BASE_KNOWLEDGE_AGENT_NAME,
-  basetokenanalysis: BASE_TOKEN_ANALYSIS_AGENT_NAME,
-  basewallet: BASE_WALLET_AGENT_NAME,
-  basemarket: BASE_MARKET_AGENT_NAME,
-  baseliquidity: BASE_LIQUIDITY_AGENT_NAME,
-  basetrading: BASE_TRADING_AGENT_NAME,
+const toolKey = (prefix: string, action: string) => `${prefix}-${action}`;
+
+const toolAgentByName: Record<string, string> = {};
+
+const addTools = (agentName: string, toolNames: string[]) => {
+  toolNames.forEach((toolName) => {
+    toolAgentByName[toolName] = agentName;
+  });
 };
 
+const addPrefixedTools = (agentName: string, prefix: string, toolNames: string[]) => {
+  addTools(
+    agentName,
+    toolNames.map((toolName) => toolKey(prefix, toolName)),
+  );
+};
+
+addPrefixedTools(BASE_KNOWLEDGE_AGENT_NAME, 'baseknowledge', [BASE_GET_KNOWLEDGE_NAME]);
+addPrefixedTools(BSC_KNOWLEDGE_AGENT_NAME, 'bscknowledge', [BSC_GET_KNOWLEDGE_NAME]);
+addPrefixedTools(BSC_WALLET_AGENT_NAME, 'bscwallet', [
+  BSC_GET_WALLET_ADDRESS_NAME,
+  BSC_BALANCE_NAME,
+  BSC_ALL_BALANCES_NAME,
+  BSC_TRANSFER_NAME,
+]);
+addPrefixedTools(TOKEN_ANALYSIS_AGENT_NAME, 'bsctokenanalysis', [
+  BSC_BUBBLE_MAPS_NAME,
+  BSC_TOP_HOLDERS_NAME,
+  BSC_PRICE_CHART_NAME,
+  BSC_GET_TOKEN_DATA_NAME,
+  BSC_GET_TOKEN_ADDRESS_NAME,
+  BSC_TOKEN_HOLDERS_NAME,
+  BSC_TOKEN_TOP_TRADERS_NAME,
+]);
+addPrefixedTools(MARKET_AGENT_NAME, 'bscmarket', [
+  BSC_GET_TRENDING_TOKENS_NAME,
+  BSC_GET_TRADER_TRADES_NAME,
+  BSC_GET_TOP_TRADERS_NAME,
+]);
+addPrefixedTools(BSC_LIQUIDITY_AGENT_NAME, 'bscliquidity', [BSC_GET_POOLS_NAME]);
+addPrefixedTools(BSC_TRADING_AGENT_NAME, 'bsctrading', [
+  BSC_GET_WALLET_ADDRESS_NAME,
+  BSC_TRADE_NAME,
+]);
+addPrefixedTools(BASE_TOKEN_ANALYSIS_AGENT_NAME, 'basetokenanalysis', [
+  BASE_BUBBLE_MAPS_NAME,
+  BASE_TOP_HOLDERS_NAME,
+  BASE_PRICE_CHART_NAME,
+  BASE_GET_TOKEN_DATA_NAME,
+  BASE_GET_TOKEN_ADDRESS_NAME,
+  BASE_TOKEN_HOLDERS_NAME,
+  BASE_TOKEN_TOP_TRADERS_NAME,
+]);
+addPrefixedTools(BASE_MARKET_AGENT_NAME, 'basemarket', [
+  BASE_GET_TRENDING_TOKENS_NAME,
+  BASE_GET_TOP_TRADERS_NAME,
+  BASE_GET_TRADER_TRADES_NAME,
+]);
+addPrefixedTools(BASE_WALLET_AGENT_NAME, 'basewallet', [
+  BASE_GET_WALLET_ADDRESS_NAME,
+  BASE_BALANCE_NAME,
+  BASE_ALL_BALANCES_NAME,
+  BASE_TRANSFER_NAME,
+]);
+addPrefixedTools(BASE_LIQUIDITY_AGENT_NAME, 'baseliquidity', [BASE_GET_POOLS_NAME]);
+addPrefixedTools(BASE_TRADING_AGENT_NAME, 'basetrading', [
+  BASE_GET_WALLET_ADDRESS_NAME,
+  BASE_TRADE_NAME,
+]);
+addPrefixedTools(STAKING_AGENT_NAME, 'staking', [
+  SOLANA_STAKE_ACTION,
+  SOLANA_UNSTAKE_ACTION,
+  SOLANA_LIQUID_STAKING_YIELDS_ACTION,
+  SOLANA_GET_TOKEN_ADDRESS_ACTION,
+  SOLANA_GET_WALLET_ADDRESS_ACTION,
+  SOLANA_BALANCE_ACTION,
+  SOLANA_TRADE_ACTION,
+]);
+addPrefixedTools(LENDING_AGENT_NAME, 'lending', [
+  SOLANA_LENDING_YIELDS_ACTION,
+  SOLANA_LEND_ACTION,
+  SOLANA_WITHDRAW_ACTION,
+  SOLANA_GET_TOKEN_ADDRESS_ACTION,
+  SOLANA_GET_WALLET_ADDRESS_ACTION,
+  SOLANA_BALANCE_ACTION,
+  SOLANA_TRADE_ACTION,
+]);
+addPrefixedTools(WALLET_AGENT_NAME, 'wallet', [
+  SOLANA_GET_WALLET_ADDRESS_ACTION,
+  SOLANA_BALANCE_ACTION,
+  SOLANA_ALL_BALANCES_NAME,
+  SOLANA_GET_TOKEN_ADDRESS_ACTION,
+  SOLANA_TRANSFER_NAME,
+]);
+
+addTools(SOCIAL_AGENT_NAME, [TWITTER_SEARCH_RECENT_NAME]);
+addTools(KNOWLEDGE_AGENT_NAME, [SEARCH_KNOWLEDGE_NAME, INVOKE_AGENT_NAME]);
+addTools(TRADING_AGENT_NAME, [SOLANA_TRADE_ACTION]);
+addTools(WALLET_AGENT_NAME, [
+  SOLANA_GET_WALLET_ADDRESS_ACTION,
+  SOLANA_BALANCE_ACTION,
+  SOLANA_ALL_BALANCES_NAME,
+  SOLANA_GET_TOKEN_ADDRESS_ACTION,
+  SOLANA_TRANSFER_NAME,
+]);
+addTools(STAKING_AGENT_NAME, [
+  SOLANA_STAKE_ACTION,
+  SOLANA_UNSTAKE_ACTION,
+  SOLANA_LIQUID_STAKING_YIELDS_ACTION,
+]);
+addTools(LENDING_AGENT_NAME, [SOLANA_LENDING_YIELDS_ACTION, SOLANA_LEND_ACTION, SOLANA_WITHDRAW_ACTION]);
+addTools(MARKET_AGENT_NAME, [
+  SOLANA_GET_TRENDING_TOKENS_NAME,
+  SOLANA_GET_TOP_TRADERS_NAME,
+  SOLANA_GET_TRADER_TRADES_NAME,
+]);
+addTools(TOKEN_ANALYSIS_AGENT_NAME, [
+  SOLANA_GET_TOKEN_DATA_NAME,
+  SOLANA_TOP_HOLDERS_NAME,
+  SOLANA_BUBBLE_MAPS_NAME,
+  SOLANA_TOKEN_HOLDERS_NAME,
+  SOLANA_TOKEN_TOP_TRADERS_NAME,
+  SOLANA_TOKEN_PRICE_CHART_NAME,
+]);
+addTools(LIQUIDITY_AGENT_NAME, [
+  SOLANA_GET_POOLS_NAME,
+  SOLANA_DEPOSIT_LIQUIDITY_NAME,
+  SOLANA_GET_LP_TOKENS_NAME,
+  SOLANA_WITHDRAW_LIQUIDITY_NAME,
+]);
+addTools(BSC_KNOWLEDGE_AGENT_NAME, [BSC_GET_KNOWLEDGE_NAME]);
+addTools(BSC_WALLET_AGENT_NAME, [
+  BSC_GET_WALLET_ADDRESS_NAME,
+  BSC_BALANCE_NAME,
+  BSC_ALL_BALANCES_NAME,
+  BSC_TRANSFER_NAME,
+]);
+addTools(TOKEN_ANALYSIS_AGENT_NAME, [
+  BSC_BUBBLE_MAPS_NAME,
+  BSC_TOP_HOLDERS_NAME,
+  BSC_PRICE_CHART_NAME,
+  BSC_GET_TOKEN_DATA_NAME,
+  BSC_GET_TOKEN_ADDRESS_NAME,
+  BSC_TOKEN_HOLDERS_NAME,
+  BSC_TOKEN_TOP_TRADERS_NAME,
+]);
+addTools(MARKET_AGENT_NAME, [
+  BSC_GET_TRENDING_TOKENS_NAME,
+  BSC_GET_TRADER_TRADES_NAME,
+  BSC_GET_TOP_TRADERS_NAME,
+]);
+addTools(BSC_LIQUIDITY_AGENT_NAME, [BSC_GET_POOLS_NAME]);
+addTools(BSC_TRADING_AGENT_NAME, [BSC_TRADE_NAME]);
+addTools(BASE_KNOWLEDGE_AGENT_NAME, [BASE_GET_KNOWLEDGE_NAME]);
+addTools(BASE_TOKEN_ANALYSIS_AGENT_NAME, [BASE_GET_TOKEN_DATA_NAME]);
+addTools(BASE_MARKET_AGENT_NAME, [
+  BASE_GET_TRENDING_TOKENS_NAME,
+  BASE_GET_TOP_TRADERS_NAME,
+  BASE_GET_TRADER_TRADES_NAME,
+]);
+addTools(BASE_WALLET_AGENT_NAME, [
+  BASE_GET_WALLET_ADDRESS_NAME,
+  BASE_BALANCE_NAME,
+  BASE_ALL_BALANCES_NAME,
+  BASE_TRANSFER_NAME,
+]);
+addTools(BASE_LIQUIDITY_AGENT_NAME, [BASE_GET_POOLS_NAME]);
+addTools(BASE_TRADING_AGENT_NAME, [BASE_TRADE_NAME]);
+
 export const getAgentName = (tool: ToolInvocation) => {
-  const toolParts = tool.toolName.split('-');
-  const agentName = toolParts[0];
-  return toolToAgent[agentName as keyof typeof toolToAgent] || 'Unknown Agent';
+  return toolAgentByName[tool.toolName] || 'Unknown Agent';
 };
 
 export const getAgentIcon = (agentName: string): IconName => {

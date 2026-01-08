@@ -23,4 +23,10 @@ export const BalanceInputSchema = z.object({
     .describe(
       'The token symbol (e.g., "USDG", "USDC"). If provided, will be used instead of fetching from DB.',
     ),
+  flow: z
+    .string()
+    .optional()
+    .describe(
+      'Optional context for the balance check to drive UI follow-ups (e.g., lending, staking, transfer, wallet).',
+    ),
 });

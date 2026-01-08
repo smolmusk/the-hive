@@ -19,35 +19,16 @@ interface Props {
 }
 
 const GetWalletAddress: React.FC<Props> = ({ tool, prevToolAgent }) => {
-  const { messages } = useChat();
-
-  // Check if we're in a staking flow by looking for recent staking-related tool invocations
-  const isInStakingOrLendingFlow = messages.some((message) =>
-    message.parts?.some((part) => {
-      return (
-        part.type === 'tool-invocation' &&
-        (part.toolInvocation.toolName.includes(`staking-`) ||
-          part.toolInvocation.toolName.includes(`lending-`))
-      );
-    }),
-  );
-
   return (
     <ToolCard
       tool={tool}
       loadingText={`Getting Solana wallet address...`}
       result={{
         heading: (result: GetWalletAddressResultType) =>
-          result.body
-            ? isInStakingOrLendingFlow
-              ? null
-              : `Fetched Solana wallet address`
-            : 'No Solana wallet address found',
+          result.body ? `Fetched Solana wallet address` : 'No Solana wallet address found',
         body: (result: GetWalletAddressResultType) =>
           result.body ? (
-            isInStakingOrLendingFlow ? null : (
-              <WalletDisplay address={result.body.address} />
-            )
+            <WalletDisplay address={result.body.address} />
           ) : (
             <p className="text-md font-medium text-muted-foreground">
               No Solana wallet address found

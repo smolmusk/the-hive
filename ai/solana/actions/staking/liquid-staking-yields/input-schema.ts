@@ -1,3 +1,9 @@
-import { z } from "zod";
+import { z } from 'zod';
 
-export const LiquidStakingYieldsInputSchema = z.object({}); 
+export const LiquidStakingYieldsInputSchema = z.object({
+  tokenSymbol: z.string().optional(),
+  protocol: z.string().optional(),
+  limit: z.number().int().positive().max(50).optional(),
+  timeHorizon: z.enum(['short', 'medium', 'long']).optional(),
+  risk: z.enum(['low', 'medium', 'high']).optional(),
+});

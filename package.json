@@ -14,7 +14,11 @@
     "lint": "next lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "format:staged": "prettier --write --ignore-unknown"
+    "format:staged": "prettier --write --ignore-unknown",
+    "validate:router": "ts-node -P tsconfig.scripts.json -r tsconfig-paths/register scripts/validate-router.ts",
+    "validate:intent": "ts-node -P tsconfig.scripts.json -r tsconfig-paths/register scripts/validate-intent.ts",
+    "validate:pending-actions": "ts-node -P tsconfig.scripts.json -r tsconfig-paths/register scripts/validate-pending-actions.ts",
+    "validate:prompts": "ts-node -P tsconfig.scripts.json -r tsconfig-paths/register scripts/validate-prompts.ts"
   },
   "dependencies": {
     "@0x/contract-addresses": "^8.13.0",
@@ -138,6 +142,8 @@
     "postcss": "^8",
     "prettier": "^3.6.2",
     "tailwindcss": "^3.4.1",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
     "typescript": "^5"
   },
   "resolutions": {

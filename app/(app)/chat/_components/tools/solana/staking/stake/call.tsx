@@ -173,13 +173,8 @@ const StakeCallBody: React.FC<Props> = ({ toolCallId, args }) => {
   const handleError = (error: unknown) => {
     console.error('Error staking:', error);
 
-    const errorStr = String(error);
-    const isUserCancellation =
-      errorStr.toLowerCase().includes('user rejected') ||
-      errorStr.toLowerCase().includes('user cancelled') ||
-      errorStr.toLowerCase().includes('user denied') ||
-      errorStr.toLowerCase().includes('rejected by user') ||
-      (error as any)?.code === 4001;
+    const errorCode = (error as any)?.code;
+    const isUserCancellation = errorCode === 4001;
 
     if (isUserCancellation) {
       addToolResult(toolCallId, {

@@ -5,6 +5,7 @@ import { Message, LoadingMessage } from '@/app/(app)/_components/chat';
 import ToolInvocation from './tools';
 import { useScrollAnchor } from '@/app/(app)/chat/_hooks';
 import { useChat } from '../_contexts/chat';
+import PreferencesSummary from './preferences-summary';
 import type { Message as MessageType } from 'ai';
 
 interface Props {
@@ -13,7 +14,7 @@ interface Props {
 }
 
 const Messages: React.FC<Props> = ({ messages, messageClassName }) => {
-  const { isResponseLoading, isLoading } = useChat();
+  const { isResponseLoading, isLoading, memory } = useChat();
   const { scrollRef, messagesRef, scrollToBottom } = useScrollAnchor();
   const prevMessageCountRef = useRef(messages.length);
   const prevIsLoadingRef = useRef(isResponseLoading);
@@ -43,6 +44,7 @@ const Messages: React.FC<Props> = ({ messages, messageClassName }) => {
       ref={scrollRef}
     >
       <div className="messages-container" ref={messagesRef}>
+        <PreferencesSummary prefs={memory?.userPrefs ?? null} />
         {visibleMessages.map((message, index) => (
           <Message
             key={message.id}

@@ -9,12 +9,6 @@ import { cn } from '@/lib/utils';
 import { getAgentName } from '../../chat/_components/tools/tool-to-agent';
 import { pfpURL } from '@/lib/pfp';
 import { useChat } from '@/app/(app)/chat/_contexts/chat';
-import {
-  SOLANA_LEND_ACTION,
-  SOLANA_ALL_BALANCES_NAME,
-  SOLANA_LENDING_YIELDS_ACTION,
-  SOLANA_LIQUID_STAKING_YIELDS_ACTION,
-} from '@/ai/action-names';
 import type { Message as MessageType, ToolInvocation as ToolInvocationType } from 'ai';
 
 interface Props {
@@ -192,25 +186,16 @@ function getDisplayContent(
   const toolInvocations = getMessageToolInvocations(message);
 
   const hasUnstakeGuide = toolInvocations.some(
-    (tool) =>
-      tool.state === 'result' &&
-      tool.toolName?.toLowerCase?.().includes('unstake') &&
-      (tool as any).result?.body?.status === 'guide',
+    (tool) => tool.state === 'result' && (tool as any).result?.body?.status === 'guide',
   );
 
   if (hasUnstakeGuide) return null;
 
-  const isSolanaWalletAllBalances = (toolName: string) => {
-    const parts = toolName.split('-');
-    const toolAgent = parts[0];
-    const actionName = parts.slice(1).join('-');
-
-    return toolAgent === 'wallet' && actionName === SOLANA_ALL_BALANCES_NAME;
-  };
-
-  const hasAllBalancesResult = toolInvocations.some(
-    (tool) => isSolanaWalletAllBalances(tool.toolName) && tool.state === 'result',
-  );
+  const hasAllBalancesResult = toolInvocations.some((tool) => {
+    if (tool.state !== 'result') return false;
+    const balances = (tool as any).result?.body?.balances;
+    return Array.isArray(balances) && balances.length > 0;
+  });
 
   if (hasAllBalancesResult) {
     return 'Balances shown above. Pick a token to swap, lend, stake, or explore next.';
@@ -219,10 +204,9 @@ function getDisplayContent(
   const completedIds = completedLendToolCallIds ?? [];
 
   const hasCompletedLend = toolInvocations.some((tool) => {
-    if (!tool.toolName.includes(SOLANA_LEND_ACTION)) return false;
     if (tool.state !== 'result') return false;
     if (!completedIds.includes(tool.toolCallId)) return false;
-    return true;
+    return (tool as any).result?.body?.status === 'complete';
   });
 
   if (hasCompletedLend) {
@@ -231,128 +215,41 @@ function getDisplayContent(
 
   const YIELDS_CTA = 'Yields shown above. Pick a pool card to continue.';
 
-  const yieldsToolStateIn = (m?: MessageType): 'none' | 'pending' | 'complete' => {
-    if (!m) return 'none';
-    const invocations = getMessageToolInvocations(m);
-
-    const isYieldsTool = (toolName: string) => {
-      const normalized = String(toolName || '').toLowerCase().replace(/-/g, '_');
-      return (
-        normalized.includes(SOLANA_LENDING_YIELDS_ACTION) ||
-        normalized.includes(SOLANA_LIQUID_STAKING_YIELDS_ACTION) ||
-        normalized.includes('lending_yields') ||
-        normalized.includes('liquid_staking_yields')
-      );
-    };
-
-    const yieldsInvocations = invocations.filter((tool) => isYieldsTool(tool.toolName));
-    if (!yieldsInvocations.length) return 'none';
-
-    const hasNonResult = yieldsInvocations.some((tool) => tool.state !== 'result');
-    return hasNonResult ? 'pending' : 'complete';
+  const isYieldPool = (pool: any) => {
+    if (!pool || typeof pool !== 'object') return false;
+    return 'yield' in pool && 'tvlUsd' in pool && 'project' in pool;
   };
 
-  const yieldsState = yieldsToolStateIn(message);
-  const prevYieldsState = yieldsToolStateIn(previousMessage);
+  const hasYieldResult = (tool: ToolInvocationType) => {
+    if (tool.state !== 'result') return false;
+    const body = (tool as any).result?.body;
+    if (!Array.isArray(body) || body.length === 0) return false;
+    return body.some(isYieldPool);
+  };
 
-  if (yieldsState === 'pending') return null;
+  const yieldsResultIn = (m?: MessageType) => {
+    if (!m) return false;
+    const invocations = getMessageToolInvocations(m);
+    return invocations.some(hasYieldResult);
+  };
 
-  if (yieldsState === 'complete') {
+  const yieldsState = yieldsResultIn(message);
+  const prevYieldsState = yieldsResultIn(previousMessage);
+
+  if (yieldsState) {
     return YIELDS_CTA;
   }
 
-  if (prevYieldsState === 'complete') {
-    const sanitized = stripYieldListings(message.content || '', { appendCta: false });
-    if (!sanitized) return null;
-
-    if (sanitized.trim() === YIELDS_CTA) return null;
-
-    const normalized = sanitized.replace(/\s+/g, ' ').trim();
-    const isJustPickInstruction =
-      normalized.length <= 140 &&
-      /\b(pick|choose|select)\b/i.test(normalized) &&
-      /\b(pool|pools|card|cards)\b/i.test(normalized);
-    if (isJustPickInstruction) return null;
-
-    return sanitized;
+  if (prevYieldsState) {
+    const content =
+      typeof message.content === 'string' ? message.content : String(message.content ?? '');
+    const trimmed = content.trim();
+    if (!trimmed) return null;
+    if (trimmed === YIELDS_CTA) return null;
+    return content;
   }
 
   return message.content || null;
-}
-
-function stripYieldListings(
-  content: string,
-  options: { appendCta?: boolean } = {},
-): string {
-  const appendCta = options.appendCta !== false;
-  const raw = (content || '').trim();
-  if (!raw) return '';
-
-  const lines = raw.split('\n');
-  const output: string[] = [];
-
-  let skippingList = false;
-  for (const line of lines) {
-    const trimmed = line.trim();
-    const isBullet = /^([-*•]|\d+[.)])\s+/.test(trimmed);
-    const hasPercent = /\b\d+(?:\.\d+)?%\b/.test(trimmed);
-    const hasYieldWord = /\b(apy|apr|yield|tvl)\b/i.test(trimmed);
-    const hasVia = /\bvia\b/i.test(trimmed);
-    const looksLikePoolListing =
-      hasPercent &&
-      (hasYieldWord || hasVia || isBullet) &&
-      (hasVia ||
-        isBullet ||
-        /\b(jupiter|kamino|marginfi|solend|drift|lido|sanctum|jito|marinade|helius|binance|bybit)\b/i.test(
-          trimmed,
-        ) ||
-        /^[A-Z0-9*]{2,16}\b/.test(trimmed));
-
-    const looksLikeListIntro =
-      /\bhere (are|is)\b/i.test(trimmed) &&
-      /\b(options|pools|rates|yields)\b/i.test(trimmed) &&
-      /\b(lend|lending|stake|staking)\b/i.test(trimmed);
-
-    if (looksLikeListIntro) {
-      continue;
-    }
-
-    if (looksLikePoolListing) {
-      skippingList = true;
-      continue;
-    }
-
-    if (skippingList) {
-      if (trimmed === '') continue;
-      const looksLikePoolListingContinuation =
-        hasPercent &&
-        (hasYieldWord || hasVia) &&
-        (hasVia ||
-          /\b(jupiter|kamino|marginfi|solend|drift|lido|sanctum|jito|marinade|helius|binance|bybit)\b/i.test(
-            trimmed,
-          ) ||
-          /^[A-Z0-9*]{2,16}\b/.test(trimmed));
-      if (isBullet || looksLikePoolListingContinuation) continue;
-      skippingList = false;
-    }
-
-    output.push(line);
-  }
-
-  const cleaned = output
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-
-  if (!cleaned) return '';
-
-  const hasPickInstruction = /\b(pick|choose|select)\b/i.test(cleaned);
-  const hasCardReference = /\b(card|cards)\b/i.test(cleaned);
-  if (appendCta && !hasPickInstruction && !hasCardReference) {
-    return `${cleaned}\n\nPick a pool card above to continue.`;
-  }
-
-  return cleaned;
 }
 
 const MessageMarkdown = React.memo(

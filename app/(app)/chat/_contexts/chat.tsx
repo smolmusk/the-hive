@@ -8,7 +8,6 @@ import React, {
   useEffect,
   useMemo,
   useRef,
-  useCallback,
 } from 'react';
 import { Message } from 'ai/react';
 import { useChat as useAiChat } from '@ai-sdk/react';
@@ -19,19 +18,15 @@ import { ChainType } from '@/app/_contexts/chain-context';
 import { useChain } from '@/app/_contexts/chain-context';
 import { useRouter, usePathname } from 'next/navigation';
 import { useGlobalChatManager } from './global-chat-manager';
-import {
-  SOLANA_GET_WALLET_ADDRESS_ACTION,
-  SOLANA_TRADE_ACTION,
-  SOLANA_STAKE_ACTION,
-  SOLANA_UNSTAKE_ACTION,
-  SOLANA_TRANSFER_NAME,
-  SOLANA_DEPOSIT_LIQUIDITY_NAME,
-  SOLANA_WITHDRAW_LIQUIDITY_NAME,
-  SOLANA_LEND_ACTION,
-  SOLANA_LIQUID_STAKING_YIELDS_ACTION,
-} from '@/ai/action-names';
 import * as Sentry from '@sentry/nextjs';
-import { useLogin } from '@/hooks';
+import { getPendingActionMessage } from '@/lib/chat/pending-action';
+import {
+  ChatMemory,
+  deriveChatMemory,
+  isChatMemoryEqual,
+  loadChatMemory,
+  saveChatMemory,
+} from '@/lib/chat/memory';
 
 export enum ColorMode {
   LIGHT = 'light',
@@ -63,6 +58,8 @@ interface ChatContextType {
   inputDisabledMessage: string;
   canStartNewChat: boolean;
   completedLendToolCallIds: string[];
+  memory: ChatMemory | null;
+  updateUserPrefs: (prefs: Partial<NonNullable<ChatMemory['userPrefs']>> | null) => void;
 }
 
 const ChatContext = createContext<ChatContextType>({
@@ -85,6 +82,8 @@ const ChatContext = createContext<ChatContextType>({
   inputDisabledMessage: '',
   canStartNewChat: true,
   completedLendToolCallIds: [],
+  memory: null,
+  updateUserPrefs: () => {},
 });
 
 interface ChatProviderProps {
@@ -105,14 +104,25 @@ const getMessageToolInvocations = (message: Message | undefined): any[] => {
   return legacyToolInvocations ?? [];
 };
 
+const isLendingLendInvocation = (toolInvocation: any): boolean => {
+  const args = toolInvocation?.args;
+  if (!args || typeof args !== 'object') return false;
+  return (
+    typeof (args as any).protocol === 'string' &&
+    typeof (args as any).protocolAddress === 'string' &&
+    typeof (args as any).tokenSymbol === 'string' &&
+    typeof (args as any).walletAddress === 'string'
+  );
+};
+
 export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
   const { user: privyUser } = usePrivy();
-  const { walletAddresses, setCurrentChain } = useChain();
-  const { user: loginUser, ready: privyReady, login, connectWallet } = useLogin();
+  const { walletAddresses } = useChain();
   const { updateChatThreadState, removeChatThread } = useGlobalChatManager();
   const router = useRouter();
   const pathname = usePathname();
   const [completedLendToolCallIds, setCompletedLendToolCallIds] = useState<string[]>([]);
+  const [memory, setMemory] = useState<ChatMemory | null>(null);
 
   const [chatId, setChatId] = useState<string>(() => {
     const urlChatId = pathname.split('/').pop();
@@ -193,6 +203,8 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
       userId: privyUser?.id,
       chatId,
       chain,
+      walletAddress: walletAddresses[chain],
+      memory: memory ?? undefined,
     },
     onError: (error) => {
       Sentry.captureException(error, {
@@ -204,60 +216,14 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     },
   });
 
+  const memoryRef = useRef<ChatMemory | null>(null);
+  useEffect(() => {
+    memoryRef.current = memory;
+  }, [memory]);
+
   const isLoading = status === 'submitted' || status === 'streaming';
 
-  const maybePromptSolanaWallet = useCallback(
-    (message: string) => {
-      if (!privyReady) return;
-
-      const lower = message.toLowerCase();
-      const stakeKeywords =
-        /\b(stake|staking|unstake)\b/.test(lower) ||
-        /\b(drift|dsol|jupiter|jupsol|hsol|helius|jito|jitosol|marinade|msol|lido|stsol|sanctum|inf|blaze|blazestake|bsol|binance|bnsol|bybit|bbsol)\b/.test(
-          lower,
-        );
-
-      if (!stakeKeywords) return;
-
-      const recentHasStakingYields = messages
-        .slice(-8)
-        .some((m) =>
-          getMessageToolInvocations(m).some((inv) =>
-            String(inv?.toolName || '').includes(SOLANA_LIQUID_STAKING_YIELDS_ACTION),
-          ),
-        );
-
-      const isProviderSelectionAfterYields = recentHasStakingYields && stakeKeywords;
-
-      const isStakingIntent =
-        /\b(stake|staking|unstake)\b/.test(lower) || isProviderSelectionAfterYields;
-      if (!isStakingIntent) return;
-
-      // Prefer Solana wallet connect flow for staking-related intents
-      setCurrentChain('solana');
-
-      const windowSolana = typeof window !== 'undefined' ? (window as any).solana : undefined;
-      const browserSolanaConnected = !windowSolana || windowSolana.isConnected === true;
-      const needsWallet = !walletAddresses.solana || !browserSolanaConnected;
-
-      if (!needsWallet) return;
-
-      if (loginUser) {
-        connectWallet();
-      } else {
-        login?.();
-      }
-    },
-    [
-      connectWallet,
-      login,
-      loginUser,
-      messages,
-      privyReady,
-      setCurrentChain,
-      walletAddresses.solana,
-    ],
-  );
+  // Wallet prompts are driven by router decisions and tool calls, not regex heuristics.
 
   useEffect(() => {
     if (isLoading) {
@@ -268,11 +234,51 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     }
   }, [isLoading, chatId, updateChatThreadState]);
 
+  useEffect(() => {
+    const stored = loadChatMemory(chatId, chain);
+    setMemory(stored ?? { lastSelection: null, userPrefs: null, profileContext: null });
+  }, [chatId, chain]);
+
+  useEffect(() => {
+    const prev = memoryRef.current;
+    const next = deriveChatMemory(messages, prev, walletAddresses[chain]);
+    if (!isChatMemoryEqual(prev, next)) {
+      setMemory(next);
+    }
+  }, [messages, walletAddresses, chain]);
+
+  useEffect(() => {
+    saveChatMemory(chatId, chain, memory);
+  }, [chatId, chain, memory]);
+
+  const updateUserPrefs = (prefs: Partial<NonNullable<ChatMemory['userPrefs']>> | null) => {
+    setMemory((prev) => {
+      const base = prev ?? { lastSelection: null, userPrefs: null, profileContext: null };
+      if (prefs === null) {
+        return { ...base, userPrefs: null };
+      }
+
+      const nextPrefs = { ...(base.userPrefs ?? {}) } as NonNullable<ChatMemory['userPrefs']>;
+      (Object.keys(prefs) as Array<keyof typeof prefs>).forEach((key) => {
+        const value = prefs[key];
+        if (value === undefined) {
+          delete nextPrefs[key as keyof typeof nextPrefs];
+        } else {
+          nextPrefs[key as keyof typeof nextPrefs] = value as any;
+        }
+      });
+
+      const normalizedPrefs = Object.keys(nextPrefs).length ? nextPrefs : null;
+      return { ...base, userPrefs: normalizedPrefs };
+    });
+  };
+
   const addToolResult = <T,>(toolCallId: string, result: ToolResult<T>) => {
     const lastMessage = messages[messages.length - 1];
     const toolInvocations = getMessageToolInvocations(lastMessage);
-    const lendInvocation = toolInvocations.find((toolInvocation) =>
-      toolInvocation.toolName.includes(SOLANA_LEND_ACTION),
+    const lendInvocation = toolInvocations.find(
+      (toolInvocation) =>
+        toolInvocation.toolCallId === toolCallId && isLendingLendInvocation(toolInvocation),
     );
 
     if (lendInvocation && (result as any)?.body?.status === 'complete') {
@@ -315,7 +321,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     if (!input.trim()) return;
 
     const userInput = input;
-    maybePromptSolanaWallet(userInput);
     setInput('');
 
     setIsResponseLoading(true);
@@ -333,7 +338,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
   };
 
   const sendMessageBase = async (message: string, annotations?: any[]) => {
-    maybePromptSolanaWallet(message);
     setIsResponseLoading(true);
 
     updateChatThreadState(chatId, {
@@ -361,37 +365,18 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     const lastMessage = messages[messages.length - 1];
     const toolInvocations = getMessageToolInvocations(lastMessage);
 
-    let message = toolInvocations
-      .map((toolInvocation) => {
-        if (toolInvocation.state === 'result') return '';
-        const toolName = toolInvocation.toolName.slice(toolInvocation.toolName.indexOf('-') + 1);
-        switch (toolName) {
-          case SOLANA_TRADE_ACTION:
-            return `Complete or cancel your trade`;
-          case SOLANA_TRANSFER_NAME:
-            return `Complete or cancel your transfer`;
-          case SOLANA_STAKE_ACTION:
-            return `Complete or cancel your stake`;
-          case SOLANA_UNSTAKE_ACTION:
-            return `Complete or cancel your unstake`;
-          case SOLANA_DEPOSIT_LIQUIDITY_NAME:
-            return `Complete or cancel your deposit`;
-          case SOLANA_WITHDRAW_LIQUIDITY_NAME:
-            return `Complete or cancel your withdraw`;
-          case SOLANA_GET_WALLET_ADDRESS_ACTION:
-            return `Connect your wallet`;
-          case 'bsc_transfer':
-            return `Complete or cancel your transfer`;
-          default:
-            return '';
-        }
-      })
-      .filter((message) => message !== '')
+    const pendingMessages = toolInvocations
+      .map(getPendingActionMessage)
+      .filter((message) => message && message.length > 0)
       .join(' and ');
-    if (message) {
-      message = message?.concat(' to continue');
+    if (pendingMessages) {
+      return `${pendingMessages} to continue`;
     }
-    return message || '';
+
+    const hasPendingTool = toolInvocations.some(
+      (toolInvocation) => toolInvocation.state !== 'result',
+    );
+    return hasPendingTool ? 'Complete the pending action to continue.' : '';
   }, [messages]);
 
   const canStartNewChat = true;
@@ -418,6 +403,8 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
         inputDisabledMessage,
         canStartNewChat,
         completedLendToolCallIds,
+        memory,
+        updateUserPrefs,
       }}
     >
       {children}

@@ -10,7 +10,48 @@ import { deepseek } from '@ai-sdk/deepseek';
 
 import { Models } from '@/types/models';
 import { WALLET_AGENT_NAME } from '@/ai/agents/wallet/name';
-import { chooseAgent } from './utils';
+import { routeSolanaRequest } from './utils';
+import { DEFAULT_SOLANA_INTENT_CLARIFYING_QUESTION } from '@/ai/routing/solana-intent';
+import {
+  SOLANA_DEPOSIT_LIQUIDITY_NAME,
+  SOLANA_LEND_ACTION,
+  SOLANA_STAKE_ACTION,
+  SOLANA_TRADE_ACTION,
+  SOLANA_TRANSFER_NAME,
+  SOLANA_UNSTAKE_ACTION,
+  SOLANA_WITHDRAW_ACTION,
+  SOLANA_WITHDRAW_LIQUIDITY_NAME,
+} from '@/ai/action-names';
+
+const gateToolsByMode = <TTools extends Record<string, CoreTool<any, any>>>(
+  tools: TTools,
+  mode: 'explore' | 'decide' | 'execute',
+): TTools => {
+  if (mode === 'execute') return tools;
+
+  const executionSuffixes = [
+    SOLANA_LEND_ACTION,
+    SOLANA_WITHDRAW_ACTION,
+    SOLANA_STAKE_ACTION,
+    SOLANA_UNSTAKE_ACTION,
+    SOLANA_TRADE_ACTION,
+    SOLANA_TRANSFER_NAME,
+    SOLANA_DEPOSIT_LIQUIDITY_NAME,
+    SOLANA_WITHDRAW_LIQUIDITY_NAME,
+  ];
+
+  const next: Record<string, CoreTool<any, any>> = {};
+  for (const [key, tool] of Object.entries(tools)) {
+    if (executionSuffixes.some((suffix) => key.endsWith(suffix))) continue;
+    next[key] = tool;
+  }
+  return next as TTools;
+};
+
+const resolveToolKey = (tools: Record<string, CoreTool<any, any>>, toolName: string) => {
+  if (tools[toolName]) return toolName;
+  return Object.keys(tools).find((key) => key.endsWith(toolName));
+};
 
 const system = `You are The Hive, a network of specialized blockchain agents on Solana.
 
@@ -55,7 +96,7 @@ Which interests you more - lending, staking, or finding trending tokens?"
 Be conversational, helpful, and guide them toward The Hive's features. Once they express interest in a specific feature, the system will route them to the specialized agent.`;
 
 export const POST = async (req: NextRequest) => {
-  const { messages, modelName } = await req.json();
+  const { messages, modelName, walletAddress, memory } = await req.json();
 
   let MAX_TOKENS: number | undefined = undefined;
   let model: LanguageModelV1 | undefined = undefined;
@@ -107,7 +148,31 @@ export const POST = async (req: NextRequest) => {
     }
   }
 
-  const chosenAgent = await chooseAgent(model, truncatedMessages);
+  const {
+    agent: chosenAgent,
+    decision,
+    intent,
+  } = await routeSolanaRequest(model, truncatedMessages, {
+    walletAddress,
+    memory,
+  });
+
+  if (intent?.needsClarification) {
+    const clarifyingQuestion =
+      intent.clarifyingQuestion || DEFAULT_SOLANA_INTENT_CLARIFYING_QUESTION;
+    const streamTextResult = streamText({
+      model,
+      system: `Respond with exactly the following question and nothing else:\n${clarifyingQuestion}`,
+      messages: [
+        {
+          role: 'user',
+          content: 'Reply with the clarifying question.',
+        },
+      ],
+    });
+
+    return streamTextResult.toDataStreamResponse();
+  }
 
   let streamTextResult: StreamTextResult<Record<string, CoreTool<any, any>>, any>;
 
@@ -160,11 +225,30 @@ IMPORTANT: Check the status field in tool results to provide contextually approp
 BUZZ, the native token of The Hive, is strictly a memecoin and has no utility.`;
     }
 
+    const gatedTools = gateToolsByMode(chosenAgent.tools, decision.mode);
+    const toolPlanItem = decision.toolPlan[0];
+    const forcedToolKey = toolPlanItem ? resolveToolKey(gatedTools, toolPlanItem.tool) : undefined;
+
+    agentSystem = `${agentSystem}\n\nROUTER MODE: ${decision.mode}\nROUTER UI: ${decision.ui}\nROUTER STOP: ${decision.stopCondition}\nROUTER TOOL PLAN: ${JSON.stringify(decision.toolPlan)}\n`;
+
+    const maxSteps = forcedToolKey
+      ? decision.stopCondition === 'when_first_yields_result_received'
+        ? 1
+        : 2
+      : undefined;
+
     streamTextResult = streamText({
       model,
-      tools: chosenAgent.tools,
+      tools: gatedTools,
       messages: truncatedMessages,
       system: agentSystem,
+      ...(forcedToolKey
+        ? {
+            toolChoice: { type: 'tool', toolName: forcedToolKey },
+            maxSteps: maxSteps,
+            ...(maxSteps && maxSteps > 1 ? { experimental_continueSteps: true } : {}),
+          }
+        : {}),
     });
   }
 
