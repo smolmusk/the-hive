@@ -96,8 +96,11 @@ const LiquidStakingYields: React.FC<{
       }
 
       const symbol = poolData?.tokenData?.symbol || poolData?.symbol;
-      const sender = internal ? sendInternalMessage : sendMessage;
-      sender(`I want to stake SOL for ${symbol}`);
+      if (internal) {
+        sendInternalMessage(`I want to stake SOL for ${symbol}`, { route: true });
+      } else {
+        sendMessage(`I want to stake SOL for ${symbol}`);
+      }
     },
     [
       isResponseLoading,

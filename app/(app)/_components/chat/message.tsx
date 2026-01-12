@@ -9,6 +9,17 @@ import { cn } from '@/lib/utils';
 import { getAgentName } from '../../chat/_components/tools/tool-to-agent';
 import { pfpURL } from '@/lib/pfp';
 import { useChat } from '@/app/(app)/chat/_contexts/chat';
+import { formatCompactNumber, formatPercent } from '@/lib/format';
+import {
+  getSummaryFromAnnotations,
+  resolveMessageLayout,
+  shouldRenderSummary,
+} from '@/lib/chat/message-layout';
+import {
+  SOLANA_LENDING_YIELDS_ACTION,
+  SOLANA_LIQUID_STAKING_YIELDS_ACTION,
+} from '@/ai/action-names';
+import { capitalizeWords } from '@/lib/string-utils';
 import type { Message as MessageType, ToolInvocation as ToolInvocationType } from 'ai';
 
 interface Props {
@@ -47,6 +58,26 @@ const Message: React.FC<Props> = ({
 
   const currentToolInvocations = getMessageToolInvocations(message);
   const previousToolInvocations = getMessageToolInvocations(previousMessage);
+  const summaryContent = getYieldSummaryFallback(message) ?? getSummaryFromAnnotations(message);
+  const layout = resolveMessageLayout(message, currentToolInvocations.length > 0);
+  const hasYieldResults = messageHasYieldResults(message);
+  const showSummary =
+    shouldRenderSummary(layout, summaryContent) || (hasYieldResults && !!summaryContent);
+  const hasCardBlock = layout.includes('card');
+  const displayContent = getDisplayContent(message, previousMessage, completedLendToolCallIds, {
+    showSummary,
+    summaryContent,
+  });
+
+  const hasVisibleText =
+    typeof displayContent === 'string' ? displayContent.trim().length > 0 : Boolean(displayContent);
+  const hasVisibleSummary =
+    showSummary && typeof summaryContent === 'string' && summaryContent.trim().length > 0;
+  const hasVisibleTools = currentToolInvocations.length > 0;
+
+  if (!isUser && !hasVisibleText && !hasVisibleSummary && !hasVisibleTools) {
+    return null;
+  }
 
   const nextMessageSameRole = nextMessage?.role === message.role;
   const previousMessageSameRole = previousMessage?.role === message.role;
@@ -128,33 +159,81 @@ const Message: React.FC<Props> = ({
           compressed && 'gap-0 md:w-full pt-0',
         )}
       >
-        {currentToolInvocations.length > 0 && (
-          <div className="flex flex-col gap-2">
-            {currentToolInvocations.map((tool, index) => (
-              <ToolComponent
-                key={tool.toolCallId}
-                tool={tool}
-                prevToolAgent={
-                  index === 0
-                    ? previousToolInvocations[0]
-                      ? getAgentName(previousToolInvocations[0])
-                      : undefined
-                    : currentToolInvocations[index - 1]
-                      ? getAgentName(currentToolInvocations[index - 1])
-                      : undefined
-                }
+        {layout.map((block, blockIndex) => {
+          if (block === 'tool') {
+            if (hasCardBlock) return null;
+            if (currentToolInvocations.length === 0) return null;
+            return (
+              <div className="flex flex-col gap-2" key={`tool-${blockIndex}`}>
+                {currentToolInvocations.map((tool, index) => (
+                  <ToolComponent
+                    key={tool.toolCallId}
+                    tool={tool}
+                    prevToolAgent={
+                      index === 0
+                        ? previousToolInvocations[0]
+                          ? getAgentName(previousToolInvocations[0])
+                          : undefined
+                        : currentToolInvocations[index - 1]
+                          ? getAgentName(currentToolInvocations[index - 1])
+                          : undefined
+                    }
+                  />
+                ))}
+              </div>
+            );
+          }
+
+          if (block === 'card') {
+            if (currentToolInvocations.length === 0) return null;
+            return (
+              <div className="flex flex-col gap-2" key={`card-${blockIndex}`}>
+                {currentToolInvocations.map((tool, index) => (
+                  <ToolComponent
+                    key={tool.toolCallId}
+                    tool={tool}
+                    prevToolAgent={
+                      index === 0
+                        ? previousToolInvocations[0]
+                          ? getAgentName(previousToolInvocations[0])
+                          : undefined
+                        : currentToolInvocations[index - 1]
+                          ? getAgentName(currentToolInvocations[index - 1])
+                          : undefined
+                    }
+                  />
+                ))}
+              </div>
+            );
+          }
+
+          if (block === 'text') {
+            if (!displayContent) return null;
+            return (
+              <MessageMarkdown
+                key={`${block}-${blockIndex}`}
+                content={displayContent as string}
+                compressed={compressed}
               />
-            ))}
-          </div>
-        )}
-        {getDisplayContent(message, previousMessage, completedLendToolCallIds) && (
-          <MessageMarkdown
-            content={
-              getDisplayContent(message, previousMessage, completedLendToolCallIds) as string
-            }
-            compressed={compressed}
-          />
-        )}
+            );
+          }
+
+          if (block === 'summary') {
+            if (!showSummary || !summaryContent) return null;
+            return (
+              <MessageMarkdown
+                key={`${block}-${blockIndex}`}
+                content={summaryContent as string}
+                compressed
+              />
+            );
+          }
+
+          return null;
+        })}
+        {!layout.includes('summary') && showSummary && summaryContent ? (
+          <MessageMarkdown content={summaryContent as string} compressed />
+        ) : null}
       </div>
     </div>
   );
@@ -176,10 +255,125 @@ function getMessageToolInvocations(message?: MessageType): ToolInvocationType[] 
   return legacyToolInvocations ?? [];
 }
 
+const normalizeToolName = (toolName: unknown) =>
+  String(toolName || '')
+    .toLowerCase()
+    .split('-')
+    .join('_');
+
+const toolMatchesAction = (toolName: unknown, action: string) => {
+  const normalized = normalizeToolName(toolName);
+  const normalizedAction = normalizeToolName(action);
+  return normalized === normalizedAction || normalized.endsWith(`_${normalizedAction}`);
+};
+
+const isYieldPool = (pool: any) => {
+  if (!pool || typeof pool !== 'object') return false;
+  return 'yield' in pool && 'tvlUsd' in pool && 'project' in pool;
+};
+
+const hasYieldResult = (tool: ToolInvocationType) => {
+  if (tool.state !== 'result') return false;
+  const body = (tool as any).result?.body;
+  if (!Array.isArray(body) || body.length === 0) return false;
+  return body.some(isYieldPool);
+};
+
+const messageHasYieldResults = (message?: MessageType) => {
+  if (!message) return false;
+  const invocations = getMessageToolInvocations(message);
+  return invocations.some(hasYieldResult);
+};
+
+const resolvePoolSymbol = (pool: any): string | null => {
+  const symbol = pool?.tokenData?.symbol || pool?.symbol;
+  if (!symbol) return null;
+  return String(symbol).toUpperCase();
+};
+
+const resolvePoolProject = (pool: any): string | null => {
+  const project = pool?.project;
+  if (!project) return null;
+  return capitalizeWords(String(project).replace('-', ' '));
+};
+
+const resolvePoolApy = (pool: any): number | null => {
+  const raw = pool?.yield ?? pool?.apy ?? pool?.apyBase;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+};
+
+const resolvePoolTvl = (pool: any): number | null => {
+  const value = Number(pool?.tvlUsd);
+  return Number.isFinite(value) ? value : null;
+};
+
+const resolveYieldLimit = (tool: ToolInvocationType): number | null => {
+  const args = (tool as any)?.args ?? {};
+  if (args.showAll) return null;
+  return 3;
+};
+
+const getYieldSummaryFallback = (message?: MessageType): string | null => {
+  if (!message) return null;
+  const invocations = getMessageToolInvocations(message);
+  const yieldTools = invocations.filter(hasYieldResult);
+  if (!yieldTools.length) return null;
+
+  let hasLending = false;
+  let hasStaking = false;
+  const pools: any[] = [];
+
+  yieldTools.forEach((tool) => {
+    const toolName = (tool as any).toolName;
+    if (toolMatchesAction(toolName, SOLANA_LENDING_YIELDS_ACTION)) {
+      hasLending = true;
+    }
+    if (toolMatchesAction(toolName, SOLANA_LIQUID_STAKING_YIELDS_ACTION)) {
+      hasStaking = true;
+    }
+    const body = (tool as any).result?.body;
+    if (Array.isArray(body)) {
+      const limit = resolveYieldLimit(tool);
+      const filtered = body.filter(isYieldPool);
+      const limited = limit ? filtered.slice(0, limit) : filtered;
+      limited.forEach((pool) => pools.push(pool));
+    }
+  });
+
+  const bestPool =
+    pools.length > 0
+      ? pools.reduce((best, current) => {
+          const bestApy = resolvePoolApy(best) ?? Number.NEGATIVE_INFINITY;
+          const currentApy = resolvePoolApy(current) ?? Number.NEGATIVE_INFINITY;
+          return currentApy > bestApy ? current : best;
+        }, pools[0])
+      : null;
+
+  const symbol = bestPool ? resolvePoolSymbol(bestPool) : null;
+  const project = bestPool ? resolvePoolProject(bestPool) : null;
+  const apy = bestPool ? resolvePoolApy(bestPool) : null;
+  const tvl = bestPool ? resolvePoolTvl(bestPool) : null;
+
+  const apyText = apy !== null ? `${formatPercent(apy)} APY` : 'APY not available';
+  const tvlText = tvl !== null ? `${formatCompactNumber(tvl)} TVL` : 'TVL not available';
+
+  const lead = hasStaking && !hasLending ? 'Top liquid staking yield' : 'Top lending yield';
+  if (symbol && project) {
+    return `${lead}: ${symbol} on ${project} at ${apyText} with ${tvlText}. Pick a pool to continue.`;
+  }
+  if (symbol) {
+    return `${lead}: ${symbol} at ${apyText} with ${tvlText}. Pick a pool to continue.`;
+  }
+
+  return `${lead} shown above. Pick a pool to continue.`;
+};
+
 function getDisplayContent(
   message: MessageType,
   previousMessage?: MessageType,
   completedLendToolCallIds?: string[],
+  options?: { showSummary?: boolean; summaryContent?: string | null },
 ): string | null {
   if (message.role !== 'assistant') return message.content || null;
 
@@ -214,30 +408,16 @@ function getDisplayContent(
   }
 
   const YIELDS_CTA = 'Yields shown above. Pick a pool card to continue.';
-
-  const isYieldPool = (pool: any) => {
-    if (!pool || typeof pool !== 'object') return false;
-    return 'yield' in pool && 'tvlUsd' in pool && 'project' in pool;
-  };
-
-  const hasYieldResult = (tool: ToolInvocationType) => {
-    if (tool.state !== 'result') return false;
-    const body = (tool as any).result?.body;
-    if (!Array.isArray(body) || body.length === 0) return false;
-    return body.some(isYieldPool);
-  };
-
-  const yieldsResultIn = (m?: MessageType) => {
-    if (!m) return false;
-    const invocations = getMessageToolInvocations(m);
-    return invocations.some(hasYieldResult);
-  };
-
-  const yieldsState = yieldsResultIn(message);
-  const prevYieldsState = yieldsResultIn(previousMessage);
+  const yieldSummary = getYieldSummaryFallback(message) ?? YIELDS_CTA;
+  const prevYieldSummary = getYieldSummaryFallback(previousMessage) ?? YIELDS_CTA;
+  const yieldsState = messageHasYieldResults(message);
+  const prevYieldsState = messageHasYieldResults(previousMessage);
 
   if (yieldsState) {
-    return YIELDS_CTA;
+    if (options?.showSummary && options?.summaryContent) {
+      return null;
+    }
+    return yieldSummary;
   }
 
   if (prevYieldsState) {
@@ -245,7 +425,7 @@ function getDisplayContent(
       typeof message.content === 'string' ? message.content : String(message.content ?? '');
     const trimmed = content.trim();
     if (!trimmed) return null;
-    if (trimmed === YIELDS_CTA) return null;
+    if (trimmed === prevYieldSummary) return null;
     return content;
   }
 

@@ -5,6 +5,7 @@ import { Button, Skeleton, Icon } from '@/components/ui';
 import { Message, ToolInvocation } from 'ai';
 import { cn } from '@/lib/utils';
 import { determineSuggestionsPrompt } from './utils';
+import type { ChatMemory } from '@/lib/chat/memory';
 
 interface Suggestion {
   title: string;
@@ -13,8 +14,16 @@ interface Suggestion {
   icon: 'Plus';
 }
 
-const generateFollowUpSuggestions = async (messages: Message[], model: Models) => {
-  const prompt = determineSuggestionsPrompt(messages);
+const generateFollowUpSuggestions = async (
+  messages: Message[],
+  model: Models,
+  memory?: ChatMemory | null,
+) => {
+  const prompt = determineSuggestionsPrompt(
+    messages,
+    memory?.userPrefs ?? null,
+    memory?.lastSelection ?? null,
+  );
 
   try {
     const response = await fetch('/api/follow-up-suggestions', {
@@ -71,7 +80,7 @@ const getMessageToolInvocations = (message: Message): ToolInvocation[] => {
 };
 
 const FollowUpSuggestions: React.FC = () => {
-  const { model, sendMessage, isResponseLoading, messages, chatId, isLoading } = useChat();
+  const { model, sendMessage, isResponseLoading, messages, chatId, isLoading, memory } = useChat();
   const [isGenerating, setIsGenerating] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const requestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -96,7 +105,7 @@ const FollowUpSuggestions: React.FC = () => {
 
     setIsGenerating(true);
     try {
-      const newSuggestions = await generateFollowUpSuggestions(messages, model);
+      const newSuggestions = await generateFollowUpSuggestions(messages, model, memory);
       if (newSuggestions?.length > 0) {
         setSuggestions(newSuggestions);
       }
@@ -105,7 +114,7 @@ const FollowUpSuggestions: React.FC = () => {
     } finally {
       setIsGenerating(false);
     }
-  }, [messages, model, isResponseLoading, isLoading]);
+  }, [messages, model, memory, isResponseLoading, isLoading]);
 
   useEffect(() => {
     generateSuggestions();

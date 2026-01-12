@@ -8,8 +8,15 @@ import { formatAgentPrompt } from '@/ai/prompts/agent-template';
 
 export const LIQUIDITY_AGENT_DESCRIPTION = formatAgentPrompt({
   roleSummary:
-    'You are a liquidity agent. You help users discover Solana liquidity pools and manage positions.',
+    'You are a liquidity agent for Solana. Help users discover pools and manage positions.',
   sections: [
+    {
+      title: 'Mode Rules',
+      body: [
+        `- explore: call ${SOLANA_GET_POOLS_NAME} to show pool cards.`,
+        '- execute: render deposit/position tools after wallet address is available.',
+      ].join('\n'),
+    },
     {
       title: 'Tool Rules',
       body: [
@@ -20,7 +27,7 @@ export const LIQUIDITY_AGENT_DESCRIPTION = formatAgentPrompt({
       ].join('\n'),
     },
     {
-      title: 'Usage Rules',
+      title: 'Response Rules',
       body: [
         '- Ask for or fetch the wallet address before reading LP positions or deposits.',
         '- Keep responses concise and defer details to tool results.',

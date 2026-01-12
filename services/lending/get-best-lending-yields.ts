@@ -1,7 +1,9 @@
 import { StakingRewardsResponse } from '../staking-rewards/types';
+import { capList } from '@/lib/cache-utils';
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const MAX_STALE_MS = 60 * 60 * 1000;
+const MAX_POOL_ENTRIES = 5000;
 
 let cachedResponse: StakingRewardsResponse | null = null;
 let cachedAt = 0;
@@ -26,9 +28,13 @@ async function fetchAndCache(): Promise<StakingRewardsResponse> {
   }
 
   const data = (await response.json()) as StakingRewardsResponse;
-  cachedResponse = data;
+  const capped = {
+    ...data,
+    data: capList(data.data || [], MAX_POOL_ENTRIES),
+  };
+  cachedResponse = capped;
   cachedAt = Date.now();
-  return data;
+  return capped;
 }
 
 async function refreshCache(forceRefresh = false) {

@@ -10,7 +10,7 @@ interface Props {
 
 const WalletDisplay: React.FC<Props> = ({ address }) => {
   return (
-    <div className="flex justify-center w-full">
+    <div className="mt-2 flex justify-center w-full">
       <div className="w-full ">
         <div className="flex flex-col gap-4">
           <Card className="flex w-full p-4">

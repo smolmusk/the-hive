@@ -1,2 +1,4 @@
-export const SOLANA_GET_TOKEN_ADDRESS_PROMPT = 
-`Get the address of a token given its ticker.`; 
+export const SOLANA_GET_TOKEN_ADDRESS_PROMPT = `Resolve a token symbol to its mint address.
+
+Input:
+- symbol`; 

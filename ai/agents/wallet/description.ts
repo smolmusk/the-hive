@@ -9,13 +9,13 @@ import { formatAgentPrompt } from '@/ai/prompts/agent-template';
 
 export const WALLET_AGENT_DESCRIPTION = formatAgentPrompt({
   roleSummary:
-    "You are a wallet agent. You handle Solana wallet balances, wallet address lookups, and transfers.",
+    'You are a wallet agent for Solana. Handle balances, wallet address lookups, and transfers.',
   sections: [
     {
       title: 'Mode Rules',
       body: [
         '- explore: answer balance/address questions; prefer tools over text-only guesses.',
-        '- execute: use transfer tools only after wallet address is available.',
+        '- execute: use transfer tools only after the wallet address is available.',
       ].join('\n'),
     },
     {

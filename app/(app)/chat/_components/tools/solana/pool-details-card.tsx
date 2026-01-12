@@ -30,6 +30,7 @@ interface PoolDetailsCardProps<T extends PoolData> {
   disabled?: boolean;
   highlightIndex?: number;
   isPending?: boolean;
+  isSelected?: boolean;
 }
 
 function PoolDetailsCard<T extends PoolData>({
@@ -40,6 +41,7 @@ function PoolDetailsCard<T extends PoolData>({
   disabled = false,
   highlightIndex = 0,
   isPending = false,
+  isSelected = false,
 }: PoolDetailsCardProps<T>) {
   const handleClick = (event: React.MouseEvent) => {
     event.stopPropagation();
@@ -48,6 +50,11 @@ function PoolDetailsCard<T extends PoolData>({
       pool_project: pool.project,
     });
     onClick(pool);
+  };
+
+  const handleLendNowClick = (event: React.MouseEvent) => {
+    if (disabled) return;
+    handleClick(event);
   };
   return (
     <Card
@@ -59,6 +66,7 @@ function PoolDetailsCard<T extends PoolData>({
           : 'cursor-pointer hover:border-brand-600/50 dark:hover:border-brand-600/50',
         index === highlightIndex &&
           'border-brand-600 dark:border-brand-600 !shadow-[0_0_4px_rgba(234,179,8,0.25)] dark:!shadow-[0_0_4px_rgba(234,179,8,0.25)]',
+        isSelected && 'ring-2 ring-brand-600/60',
         isPending && 'ring-2 ring-brand-600/50',
       )}
       onClick={(e) => !disabled && handleClick(e)}
@@ -166,15 +174,26 @@ function PoolDetailsCard<T extends PoolData>({
       </div>
 
       <div className="mt-4 md:absolute md:bottom-0 md:left-0 md:right-0 md:transform md:translate-y-full md:group-hover:translate-y-0 md:transition-transform md:duration-300 md:ease-in-out md:bg-white md:dark:bg-neutral-800 md:border-t md:border-gray-200 md:dark:border-gray-700 md:p-3">
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full"
-          onClick={(e) => !disabled && onMoreDetailsClick(pool, e)}
-          disabled={disabled}
-        >
-          More Details
-        </Button>
+        <div className="flex w-full gap-2">
+          <Button
+            variant="brand"
+            size="sm"
+            className="flex-1"
+            onClick={handleLendNowClick}
+            disabled={disabled}
+          >
+            Lend now
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={(e) => !disabled && onMoreDetailsClick(pool, e)}
+            disabled={disabled}
+          >
+            More Details
+          </Button>
+        </div>
       </div>
     </Card>
   );

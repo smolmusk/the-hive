@@ -1,6 +1,7 @@
 import { KaminoMarket, DEFAULT_RECENT_SLOT_DURATION_MS } from '@kamino-finance/klend-sdk';
 import { createSolanaRpc, address as createAddress } from '@solana/kit';
 import { Connection, PublicKey } from '@solana/web3.js';
+import { capList } from '@/lib/cache-utils';
 
 const KAMINO_MAIN_MARKET = new PublicKey('7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF');
 const KAMINO_PROGRAM_ID = new PublicKey('KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD');
@@ -16,6 +17,7 @@ export interface KaminoPoolData {
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const MAX_STALE_MS = 60 * 60 * 1000;
+const MAX_POOL_ENTRIES = 2000;
 
 let cachedKaminoPools: KaminoPoolData[] | null = null;
 let cachedAt = 0;
@@ -65,9 +67,10 @@ async function fetchAndCache(): Promise<KaminoPoolData[]> {
       console.warn(`⚠️ Failed to process Kamino reserve ${reserve.symbol}:`, err);
     }
   }
-  cachedKaminoPools = pools;
+  const cappedPools = capList(pools, MAX_POOL_ENTRIES);
+  cachedKaminoPools = cappedPools;
   cachedAt = Date.now();
-  return pools;
+  return cappedPools;
 }
 
 async function refreshCache(forceRefresh = false) {

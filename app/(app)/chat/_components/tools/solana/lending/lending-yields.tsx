@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useChat } from '@/app/(app)/chat/_contexts/chat';
 import { useChain } from '@/app/_contexts/chain-context';
-import { usePrivy } from '@privy-io/react-auth';
 import ToolCard from '../../tool-card';
 import { SOLANA_LENDING_POOL_DATA_STORAGE_KEY } from '@/lib/constants';
 import { capitalizeWords } from '@/lib/string-utils';
 import PoolDetailsModal from '../staking/pool-details-modal';
 import PoolDetailsCard from '../pool-details-card';
 import type { ToolInvocation } from 'ai';
+import { SOLANA_LEND_ACTION } from '@/ai/action-names';
 import type {
   LendingYieldsResultBodyType,
   LendingYieldsResultType,
@@ -24,6 +24,7 @@ const LendingYieldsTool: React.FC<Props> = ({ tool, prevToolAgent }) => {
     tokenSymbol?: string;
     protocol?: string;
     limit?: number;
+    showAll?: boolean;
   };
   const requestedSymbol = args.tokenSymbol ? args.tokenSymbol.toUpperCase() : null;
   const requestedProvider = args.protocol ? args.protocol.toLowerCase() : null;
@@ -44,23 +45,7 @@ const LendingYieldsTool: React.FC<Props> = ({ tool, prevToolAgent }) => {
   const getHeading = (result: LendingYieldsResultType) => {
     const pools = result.body || [];
     if (!pools.length) return 'No lending yields found';
-    const stableCoins = [
-      'USDC',
-      'USDT',
-      'USDC.E',
-      'USDT.E',
-      'USDX',
-      'USDS',
-      'USDG',
-      'USDCso',
-      'PYUSD',
-      'FDUSD',
-      'DAI',
-      'EUROe',
-      'EURC',
-    ];
     const uniqueSymbols = Array.from(new Set(pools.map((p) => (p.symbol || '').toUpperCase())));
-    const isStableOnly = uniqueSymbols.every((s) => stableCoins.includes(s));
     if (requestedSymbol && uniqueSymbols.includes(requestedSymbol)) {
       if (requestedProvider) {
         return `Fetched best ${requestedSymbol} lending yields on ${capitalizeWords(
@@ -70,14 +55,14 @@ const LendingYieldsTool: React.FC<Props> = ({ tool, prevToolAgent }) => {
       return `Fetched best ${requestedSymbol} lending yields`;
     }
     if (requestedProvider) {
-      return `Fetched best ${isStableOnly ? 'stablecoin ' : ''}lending yields on ${capitalizeWords(
+      return `Fetched best stablecoin lending yields on ${capitalizeWords(
         requestedProvider.replace('-', ' '),
       )}`;
     }
-    if (uniqueSymbols.length === 1 && isStableOnly) {
+    if (uniqueSymbols.length === 1) {
       return `Fetched best ${uniqueSymbols[0]} lending yields`;
     }
-    return isStableOnly ? 'Fetched best stablecoin lending yields' : 'Fetched best lending yields';
+    return 'Fetched best stablecoin lending yields';
   };
 
   return (
@@ -93,6 +78,8 @@ const LendingYieldsTool: React.FC<Props> = ({ tool, prevToolAgent }) => {
               body={result.body}
               requestedSymbol={requestedSymbol}
               requestedProvider={requestedProvider}
+              limit={args.limit}
+              showAll={args.showAll}
             />
           ) : (
             ''
@@ -108,10 +95,11 @@ const LendingYields: React.FC<{
   body: LendingYieldsResultBodyType;
   requestedSymbol?: string | null;
   requestedProvider?: string | null;
-}> = ({ body, requestedSymbol, requestedProvider }) => {
+  limit?: number;
+  showAll?: boolean;
+}> = ({ body, requestedSymbol, requestedProvider, limit, showAll }) => {
   const { sendInternalMessage, isResponseLoading } = useChat();
-  const { currentWalletAddress, setCurrentChain } = useChain();
-  const { login } = usePrivy();
+  const { setCurrentChain } = useChain();
   const [selectedPool, setSelectedPool] = useState<LendingYieldsPoolData | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDisabled, setIsDisabled] = useState(true);
@@ -144,10 +132,14 @@ const LendingYields: React.FC<{
     return pools;
   }, [body, symbolToFilter, providerToFilter]);
 
+  const shouldShowAll = Boolean(showAll);
+  const displayLimit = shouldShowAll ? null : 3;
+
   const displayPools = useMemo(() => {
     if (!poolsToShow) return [];
-    return poolsToShow;
-  }, [poolsToShow]);
+    if (!displayLimit) return poolsToShow;
+    return poolsToShow.slice(0, displayLimit);
+  }, [poolsToShow, displayLimit]);
 
   const highlightIndex = useMemo(() => {
     if (!displayPools.length) return 0;
@@ -168,23 +160,45 @@ const LendingYields: React.FC<{
       if (isResponseLoading) return;
 
       setCurrentChain('solana');
-      if (!currentWalletAddress) {
-        login?.();
-        return;
-      }
-
       const symbol = poolData?.tokenData?.symbol || poolData?.symbol;
       const tokenAddress = poolData?.tokenMintAddress || poolData?.tokenData?.id;
+      const protocol = poolData?.project || '';
       const pendingId = tokenAddress || poolData.name;
 
       setPendingPoolId(pendingId);
       setIsDisabled(true);
 
+      const toolArgs: Record<string, unknown> = {};
+      if (tokenAddress) toolArgs.tokenAddress = tokenAddress;
+      if (symbol) toolArgs.tokenSymbol = symbol;
+      if (protocol) toolArgs.protocol = protocol;
+
+      const toolPlan = [
+        Object.keys(toolArgs).length
+          ? { tool: SOLANA_LEND_ACTION, args: toolArgs }
+          : { tool: SOLANA_LEND_ACTION },
+      ];
+
       sendInternalMessage(
         `I want to lend ${symbol} (${tokenAddress}) to ${capitalizeWords(poolData.project)}`,
+        {
+          route: true,
+          annotation: {
+            toolPlan,
+            intent: {
+              goal: 'execute',
+              domain: 'lending',
+              queryType: 'lend',
+              constraints: {
+                tokenSymbol: symbol,
+                protocol,
+              },
+            },
+          },
+        },
       );
     },
-    [currentWalletAddress, isResponseLoading, login, sendInternalMessage, setCurrentChain],
+    [isResponseLoading, sendInternalMessage, setCurrentChain],
   );
 
   const handleMoreDetailsClick = (poolData: LendingYieldsPoolData, event: React.MouseEvent) => {
@@ -203,22 +217,23 @@ const LendingYields: React.FC<{
 
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4 mt-4">
-        {displayPools?.map((pool, index) => (
-          <PoolDetailsCard
-            key={`${pool.name}-${pool.project}-${index}`}
-            pool={pool}
-            index={index}
-            highlightIndex={highlightIndex}
-            onClick={handleLendClick}
-            onMoreDetailsClick={handleMoreDetailsClick}
-            disabled={isDisabled}
-            isPending={
-              pendingPoolId === (pool.tokenMintAddress || pool.tokenData?.id || pool.name)
-            }
-          />
-        ))}
-      </div>
+	      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4 mt-2">
+	        {displayPools?.map((pool, index) => (
+	          <PoolDetailsCard
+	            key={`${pool.name}-${pool.project}-${index}`}
+	            pool={pool}
+	            index={index}
+	            highlightIndex={highlightIndex}
+	            onClick={handleLendClick}
+	            onMoreDetailsClick={handleMoreDetailsClick}
+	            disabled={isDisabled}
+	            isSelected={
+	              pendingPoolId === (pool.tokenMintAddress || pool.tokenData?.id || pool.name)
+	            }
+	            isPending={pendingPoolId === (pool.tokenMintAddress || pool.tokenData?.id || pool.name)}
+	          />
+	        ))}
+	      </div>
 
       <PoolDetailsModal
         pool={selectedPool}

@@ -4,10 +4,20 @@ import { getKaminoPools } from '@/services/lending/get-kamino-pools';
 import { getBestLiquidStaking } from '@/services/staking-rewards';
 
 const WARM_INTERVAL_MS = 4 * 60 * 1000;
+const NETWORK_BACKOFF_MS = 10 * 60 * 1000;
 
 declare global {
   var __cacheWarmersStarted: boolean | undefined;
 }
+
+let skipUntil = 0;
+
+const isNetworkFailure = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false;
+  const anyError = error as { code?: string; cause?: { code?: string } };
+  const code = anyError.code || anyError.cause?.code;
+  return code === 'ENOTFOUND' || code === 'ECONNRESET' || code === 'ETIMEDOUT';
+};
 
 async function warmCaches() {
   await Promise.all([
@@ -25,14 +35,20 @@ async function warmCaches() {
 export function startCacheWarmers() {
   if (typeof globalThis === 'undefined') return;
   if (process.env.NEXT_RUNTIME === 'edge') return;
+  if (process.env.DISABLE_CACHE_WARMER === 'true') return;
   if (globalThis.__cacheWarmersStarted) return;
 
   globalThis.__cacheWarmersStarted = true;
 
-  const run = () =>
-    warmCaches().catch((error) => {
+  const run = () => {
+    if (skipUntil > Date.now()) return;
+    return warmCaches().catch((error) => {
+      if (isNetworkFailure(error)) {
+        skipUntil = Date.now() + NETWORK_BACKOFF_MS;
+      }
       console.error('Cache warm-up failed:', error);
     });
+  };
 
   // Warm immediately on boot
   void run();

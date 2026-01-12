@@ -1,7 +1,7 @@
-export const SOLANA_GET_POOLS_PROMPT = 
-`This function gets all of the liquidity pools for a token.
-The function requires a symbol, or a mint address.
+export const SOLANA_GET_POOLS_PROMPT = `Get Raydium pools for a token.
 
-If the user explicitly asks for "the native token of the hive", use the BUZZ nativetoken address (9DHe3pycTuymFk4H4bbPoAJ4hQrr2kaLDF6J6aAKpump).
+Input:
+- symbol or mint address
 
-If the user asks about liquidity pools without specifying a token, ask them which token they want to find pools for.`; 
+If the user asks for the Hive native token, use BUZZ: 9DHe3pycTuymFk4H4bbPoAJ4hQrr2kaLDF6J6aAKpump.
+If no token is specified, ask which token they want pools for.`; 

@@ -118,7 +118,13 @@ const isInternalUserMessage = (message: Message | undefined): boolean => {
   if (!message || message.role !== 'user') return false;
   const annotations = (message as any)?.annotations;
   if (!Array.isArray(annotations)) return false;
-  return annotations.some((a) => a && typeof a === 'object' && (a as any).internal === true);
+  return annotations.some(
+    (a) =>
+      a &&
+      typeof a === 'object' &&
+      (a as any).internal === true &&
+      (a as any).route !== true,
+  );
 };
 
 const lastUserText = (messages: Message[]): string => {
@@ -251,7 +257,7 @@ Rules:
 - Interpret intent using context, not keyword matching.
 - Use "needsClarification" when user intent is ambiguous or missing key constraints.
 - If user says "try again" or "out of these", set references accordingly.
-- If user asks for the full list or "all pools", set constraints.limit to a large number (e.g., 50).
+- If user asks for the full list or "all pools", set constraints.limit to a large number (e.g., 50), set queryType to include "all" (e.g., "all_pools"), and add an assumption like "user requested all pools".
 - Keep assumptions short and explicit.
 `,
   };

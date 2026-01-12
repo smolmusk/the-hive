@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import EmptyChat from './empty';
 import Messages from './messages';
 import ChatInput from './input';
+import MetricsPanel from './metrics-panel';
 import { LoadingMessage } from '@/app/(app)/_components/chat';
 import { useChat } from '../_contexts/chat';
 import { useState } from 'react';
@@ -57,6 +58,7 @@ const Chat: React.FC = () => {
           </div>
         </div>
       </div>
+      <MetricsPanel />
     </>
   );
 };

@@ -44,7 +44,7 @@ export type SolanaRouterDecision = {
   ui: RouterUi;
   toolPlan: RouterToolPlanItem[];
   stopCondition: RouterStopCondition;
-  layout?: Array<'text' | 'tool' | 'summary'>;
+  layout?: Array<'text' | 'tool' | 'summary' | 'card'>;
 };
 
 const RouterToolPlanItemSchema = z.object({
@@ -70,7 +70,7 @@ export const SolanaRouterDecisionSchema = z.object({
   stopCondition: z
     .enum(['when_first_yields_result_received', 'after_tool_plan_complete', 'none'])
     .default('none'),
-  layout: z.array(z.enum(['text', 'tool', 'summary'])).optional(),
+  layout: z.array(z.enum(['text', 'tool', 'summary', 'card'])).optional(),
 });
 
 type YieldPoolSample = {
@@ -123,7 +123,13 @@ const isInternalUserMessage = (message: Message | undefined): boolean => {
   if (!message || message.role !== 'user') return false;
   const annotations = (message as any)?.annotations;
   if (!Array.isArray(annotations)) return false;
-  return annotations.some((a) => a && typeof a === 'object' && (a as any).internal === true);
+  return annotations.some(
+    (a) =>
+      a &&
+      typeof a === 'object' &&
+      (a as any).internal === true &&
+      (a as any).route !== true,
+  );
 };
 
 const extractToolInvocations = (message: Message | undefined): ToolInvocation[] => {
@@ -155,8 +161,8 @@ const toolMatchesAction = (toolName: unknown, action: string) => {
 const defaultLayoutForUI = (
   ui: SolanaRouterDecision['ui'],
 ): NonNullable<SolanaRouterDecision['layout']> => {
-  if (ui === 'cards') return ['tool'];
-  if (ui === 'cards_then_text') return ['tool', 'text'];
+  if (ui === 'cards') return ['card', 'summary'];
+  if (ui === 'cards_then_text') return ['card', 'text'];
   return ['text'];
 };
 
@@ -196,7 +202,10 @@ const selectionFromAction = (
   if (!args || typeof args !== 'object') return null;
   const anyArgs = args as Record<string, any>;
 
-  if (toolMatchesAction(toolName, SOLANA_LEND_ACTION) || toolMatchesAction(toolName, SOLANA_WITHDRAW_ACTION)) {
+  if (
+    toolMatchesAction(toolName, SOLANA_LEND_ACTION) ||
+    toolMatchesAction(toolName, SOLANA_WITHDRAW_ACTION)
+  ) {
     const tokenSymbol =
       typeof anyArgs.tokenSymbol === 'string' ? anyArgs.tokenSymbol.toUpperCase() : undefined;
     const protocol =
@@ -216,12 +225,14 @@ const selectionFromAction = (
       typeof poolData.symbol === 'string' ? String(poolData.symbol).toUpperCase() : undefined;
     const protocol =
       typeof poolData.project === 'string' ? String(poolData.project).toLowerCase() : undefined;
-    const poolId = typeof anyArgs.contractAddress === 'string' ? anyArgs.contractAddress : undefined;
+    const poolId =
+      typeof anyArgs.contractAddress === 'string' ? anyArgs.contractAddress : undefined;
     return tokenSymbol || protocol || poolId ? { tokenSymbol, protocol, poolId } : null;
   }
 
   if (toolMatchesAction(toolName, SOLANA_UNSTAKE_ACTION)) {
-    const poolId = typeof anyArgs.contractAddress === 'string' ? anyArgs.contractAddress : undefined;
+    const poolId =
+      typeof anyArgs.contractAddress === 'string' ? anyArgs.contractAddress : undefined;
     return poolId ? { poolId } : null;
   }
 
@@ -238,9 +249,7 @@ const selectionFromAction = (
   return null;
 };
 
-const prefsFromIntent = (
-  intent?: SolanaIntent,
-): SolanaRouterContext['userPrefs'] => {
+const prefsFromIntent = (intent?: SolanaIntent): SolanaRouterContext['userPrefs'] => {
   const constraints = intent?.constraints;
   if (!constraints) return null;
   const prefs: NonNullable<SolanaRouterContext['userPrefs']> = {};
@@ -356,7 +365,13 @@ export const buildSolanaRouterContext = (
 
 export const buildSolanaRouterInput = (
   messages: Message[],
-  options?: { walletAddress?: string; intent?: SolanaIntent },
+  options?: {
+    walletAddress?: string;
+    intent?: SolanaIntent;
+    lastSelection?: SolanaRouterContext['lastSelection'];
+    userPrefs?: SolanaRouterContext['userPrefs'];
+    profileContext?: SolanaRouterContext['profileContext'];
+  },
 ) => {
   return {
     lastUserText: lastUserText(messages),
@@ -414,6 +429,43 @@ const agentForTool = (toolName: string): RouterAgentKey | null => {
   if (toolMatchesAction(toolName, SOLANA_GET_WALLET_ADDRESS_ACTION)) {
     return 'wallet';
   }
+  return null;
+};
+
+const inferExecutionToolFromIntent = (intent?: SolanaIntent): string | null => {
+  if (!intent || intent.goal !== 'execute') return null;
+  const domain = intent.domain;
+  const queryType = String(intent.queryType || '').toLowerCase();
+
+  if (domain === 'lending') {
+    if (queryType.includes('withdraw')) return SOLANA_WITHDRAW_ACTION;
+    return SOLANA_LEND_ACTION;
+  }
+
+  if (domain === 'staking') {
+    if (queryType.includes('unstake') || queryType.includes('withdraw')) {
+      return SOLANA_UNSTAKE_ACTION;
+    }
+    return SOLANA_STAKE_ACTION;
+  }
+
+  if (domain === 'trading') {
+    return SOLANA_TRADE_ACTION;
+  }
+
+  if (domain === 'wallet') {
+    if (queryType.includes('transfer') || queryType.includes('send')) {
+      return SOLANA_TRANSFER_NAME;
+    }
+  }
+
+  if (domain === 'liquidity') {
+    if (queryType.includes('withdraw')) return SOLANA_WITHDRAW_LIQUIDITY_NAME;
+    if (queryType.includes('deposit') || queryType.includes('add')) {
+      return SOLANA_DEPOSIT_LIQUIDITY_NAME;
+    }
+  }
+
   return null;
 };
 
@@ -479,6 +531,60 @@ const applyUserPrefsToYieldToolPlan = (
   });
 };
 
+const DEFAULT_YIELD_LIMIT = 3;
+const MAX_YIELD_LIMIT_WITHOUT_ALL = 10;
+const ALL_POOLS_LIMIT = 50;
+
+const allowLargeYieldLimit = (intent?: SolanaIntent): boolean => {
+  if (!intent?.constraints?.limit) return false;
+  const queryType = String(intent.queryType || '').toLowerCase();
+  if (
+    queryType.includes('all') ||
+    queryType.includes('full') ||
+    queryType.includes('complete') ||
+    queryType.includes('every')
+  ) {
+    return true;
+  }
+  const assumptions = intent.assumptions?.map((item) => item.toLowerCase()) ?? [];
+  return assumptions.some(
+    (item) =>
+      item.includes('all pools') ||
+      item.includes('full list') ||
+      item.includes('every pool'),
+  );
+};
+
+const applyDefaultLimitToYieldToolPlan = (
+  toolPlan: RouterToolPlanItem[],
+  intent?: SolanaIntent,
+): RouterToolPlanItem[] =>
+  toolPlan.map((item) => {
+    if (!isYieldTool(item.tool)) return item;
+    const nextArgs: Record<string, unknown> = { ...(item.args ?? {}) };
+    const limitValue = Number(nextArgs.limit);
+    const hasLimit = Number.isFinite(limitValue);
+    const honorLarge = allowLargeYieldLimit(intent);
+
+    if (honorLarge) {
+      nextArgs.showAll = true;
+      if (!hasLimit || limitValue < ALL_POOLS_LIMIT) {
+        nextArgs.limit = ALL_POOLS_LIMIT;
+      }
+    } else {
+      if (nextArgs.showAll !== undefined) {
+        delete (nextArgs as { showAll?: boolean }).showAll;
+      }
+      if (!hasLimit) {
+        nextArgs.limit = DEFAULT_YIELD_LIMIT;
+      } else if (limitValue > MAX_YIELD_LIMIT_WITHOUT_ALL) {
+        nextArgs.limit = DEFAULT_YIELD_LIMIT;
+      }
+    }
+
+    return Object.keys(nextArgs).length ? { ...item, args: nextArgs } : item;
+  });
+
 export const normalizeSolanaRouterDecision = (
   decision: SolanaRouterDecision,
   context?: SolanaRouterContext,
@@ -522,7 +628,11 @@ export const normalizeSolanaRouterDecision = (
     }
   }
 
-  if (intentReferences?.fromLastSelection && context?.lastSelection && !normalized.toolPlan.length) {
+  if (
+    intentReferences?.fromLastSelection &&
+    context?.lastSelection &&
+    !normalized.toolPlan.length
+  ) {
     const intentDomain = context.intent?.domain;
     if (normalized.agent === 'none' && intentDomain && intentDomain !== 'none') {
       normalized.agent = intentDomain as RouterAgentKey;
@@ -532,8 +642,22 @@ export const normalizeSolanaRouterDecision = (
     }
   }
 
+  if (!normalized.toolPlan.length && context?.intent?.goal === 'execute') {
+    const inferredTool = inferExecutionToolFromIntent(context.intent);
+    if (inferredTool) {
+      normalized.toolPlan = [{ tool: inferredTool }];
+      if (normalized.agent === 'none') {
+        const inferredAgent = agentForTool(inferredTool);
+        if (inferredAgent) {
+          normalized.agent = inferredAgent;
+        }
+      }
+    }
+  }
+
   normalized.toolPlan = applyIntentToYieldToolPlan(normalized.toolPlan, context?.intent);
   normalized.toolPlan = applyUserPrefsToYieldToolPlan(normalized.toolPlan, context?.userPrefs);
+  normalized.toolPlan = applyDefaultLimitToYieldToolPlan(normalized.toolPlan, context?.intent);
 
   if (normalized.agent === 'none') {
     return applyLayoutDefaults({
@@ -567,6 +691,20 @@ export const normalizeSolanaRouterDecision = (
   if (hasYieldTool) {
     normalized.stopCondition =
       normalized.ui === 'cards' ? 'when_first_yields_result_received' : 'after_tool_plan_complete';
+  }
+
+  if (hasYieldTool && normalized.ui === 'cards') {
+    const layout = normalized.layout ?? defaultLayoutForUI('cards');
+    if (!layout.includes('summary')) {
+      normalized.layout = [...layout, 'summary'];
+    }
+  }
+
+  if (normalized.toolPlan.length > 0 && normalized.ui !== 'cards' && !hasYieldTool) {
+    const layout = normalized.layout ?? defaultLayoutForUI(normalized.ui);
+    if (!layout.includes('tool')) {
+      normalized.layout = ['tool', ...layout.filter((block) => block !== 'tool')];
+    }
   }
 
   if (normalized.mode === 'execute' && context && !context.wallet.hasWalletAddress) {
@@ -609,7 +747,7 @@ Schema:
   "ui": "cards|cards_then_text|text",
   "toolPlan": [{ "tool": string, "args": object }],
   "stopCondition": "when_first_yields_result_received|after_tool_plan_complete|none",
-  "layout": ["text", "tool", "summary"]
+  "layout": ["text", "tool", "summary", "card"]
 }
 
 Rules:

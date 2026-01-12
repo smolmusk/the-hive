@@ -1,4 +1,6 @@
-export const SOLANA_GET_TOKEN_DATA_PROMPT = 
-`Use this function to get the token data for a given token.
-The token data function requires an address, ticker, or name of the token.
-If a user asks for the native token of the hive, this platform, call this function with BUZZ as the search term.`; 
+export const SOLANA_GET_TOKEN_DATA_PROMPT = `Get token data by address, symbol, or name.
+
+Input:
+- search
+
+If the user asks for the Hive native token, use "BUZZ" as the search term.`; 

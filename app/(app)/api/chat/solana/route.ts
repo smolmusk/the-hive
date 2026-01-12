@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 
-import { CoreTool, LanguageModelV1, streamText, StreamTextResult } from 'ai';
+import { CoreTool, LanguageModelV1, StreamData, streamText, StreamTextResult } from 'ai';
 
 import { openai } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
@@ -10,8 +10,10 @@ import { deepseek } from '@ai-sdk/deepseek';
 
 import { Models } from '@/types/models';
 import { WALLET_AGENT_NAME } from '@/ai/agents/wallet/name';
+import type { SolanaRouterDecision } from '@/ai/routing/solana-router';
 import { routeSolanaRequest } from './utils';
 import { DEFAULT_SOLANA_INTENT_CLARIFYING_QUESTION } from '@/ai/routing/solana-intent';
+import { recordTiming } from '@/lib/metrics';
 import {
   SOLANA_DEPOSIT_LIQUIDITY_NAME,
   SOLANA_LEND_ACTION,
@@ -22,6 +24,32 @@ import {
   SOLANA_WITHDRAW_ACTION,
   SOLANA_WITHDRAW_LIQUIDITY_NAME,
 } from '@/ai/action-names';
+
+const resolveSummaryForDecision = (decision: SolanaRouterDecision): string | undefined => {
+  if (decision.stopCondition === 'when_first_yields_result_received') {
+    if (decision.agent === 'lending') {
+      return 'Top lending yields shown above. Pick a pool to continue.';
+    }
+    if (decision.agent === 'staking') {
+      return 'Top liquid staking yields shown above. Pick a pool to continue.';
+    }
+    return 'Yields shown above. Pick a pool to continue.';
+  }
+
+  const summariesByAgent: Record<SolanaRouterDecision['agent'], string> = {
+    lending: 'Lending options shown above. Pick a pool to continue.',
+    staking: 'Staking options shown above. Pick a pool to continue.',
+    wallet: 'Wallet results shown above. Pick one to continue.',
+    trading: 'Swap options shown above. Pick one to continue.',
+    market: 'Market highlights shown above. Pick one to continue.',
+    'token-analysis': 'Token analysis cards shown above. Pick one to continue.',
+    liquidity: 'Liquidity pools shown above. Pick one to continue.',
+    knowledge: 'Knowledge cards shown above. Pick one to continue.',
+    none: 'Cards above show the results. Pick one to continue.',
+  };
+
+  return summariesByAgent[decision.agent];
+};
 
 const gateToolsByMode = <TTools extends Record<string, CoreTool<any, any>>>(
   tools: TTools,
@@ -53,6 +81,16 @@ const resolveToolKey = (tools: Record<string, CoreTool<any, any>>, toolName: str
   return Object.keys(tools).find((key) => key.endsWith(toolName));
 };
 
+const resolveToolPlanKeys = (
+  tools: Record<string, CoreTool<any, any>>,
+  toolPlan: Array<{ tool: string }>,
+) => {
+  const resolved = toolPlan.map((item) => resolveToolKey(tools, item.tool));
+  const hasMissing = resolved.some((key) => !key);
+  const keys = resolved.filter(Boolean) as string[];
+  return { keys, hasMissing };
+};
+
 const system = `You are The Hive, a network of specialized blockchain agents on Solana.
 
 Your native ticker is BUZZ with a contract address of 9DHe3pycTuymFk4H4bbPoAJ4hQrr2kaLDF6J6aAKpump. BUZZ is strictly a memecoin and has no utility.
@@ -63,7 +101,7 @@ When users ask exploratory or general questions about opportunities on Solana, y
 3. Guide them to choose what interests them
 
 AVAILABLE FEATURES ON SOLANA:
-- **Lending**: View top lending yields for stablecoins (USDC/USDT) and lend to protocols like Kamino
+- **Lending**: View top stablecoin lending yields and lend to protocols like Kamino
 - **Staking**: View top liquid staking yields for SOL and stake to get LSTs (liquid staking tokens)
 - **Trading**: Swap tokens on Solana DEXs
 - **Market Data**: Get top traders and trading history
@@ -85,7 +123,7 @@ You: "Great question! Let me help you discover the best opportunities on Solana.
 
 The Hive specializes in three main discovery strategies:
 
-**Lending** - Earn high yields on stablecoins (USDC/USDT) by lending to DeFi protocols. Currently seeing rates of 13-16% APY on platforms like Kamino.
+**Lending** - Earn yields by lending stablecoins on Solana. Current rates vary by pool and protocol.
 
 **Staking** - Stake your SOL to earn rewards (6-8% APY) and receive liquid staking tokens (LSTs) that you can use in other DeFi protocols.
 
@@ -148,6 +186,7 @@ export const POST = async (req: NextRequest) => {
     }
   }
 
+  const routeStartedAt = Date.now();
   const {
     agent: chosenAgent,
     decision,
@@ -156,10 +195,38 @@ export const POST = async (req: NextRequest) => {
     walletAddress,
     memory,
   });
+  recordTiming('router.decision', Date.now() - routeStartedAt);
+
+  const layoutData = new StreamData();
+  const layout =
+    decision.layout ??
+    (decision.ui === 'cards'
+      ? ['card', 'summary']
+      : decision.ui === 'cards_then_text'
+        ? ['card', 'text']
+        : ['text']);
+  const summary = layout.includes('summary') ? resolveSummaryForDecision(decision) : undefined;
+
+  layoutData.appendMessageAnnotation({
+    layout,
+    ...(summary ? { summary } : {}),
+  });
+  const closeLayoutData = () => {
+    try {
+      layoutData.close();
+    } catch {
+      // No-op: avoid bubbling stream-close errors.
+    }
+  };
+
+  const responseHeaders = {
+    'Cache-Control': 'no-store',
+  };
 
   if (intent?.needsClarification) {
     const clarifyingQuestion =
       intent.clarifyingQuestion || DEFAULT_SOLANA_INTENT_CLARIFYING_QUESTION;
+    const llmStartedAt = Date.now();
     const streamTextResult = streamText({
       model,
       system: `Respond with exactly the following question and nothing else:\n${clarifyingQuestion}`,
@@ -169,18 +236,27 @@ export const POST = async (req: NextRequest) => {
           content: 'Reply with the clarifying question.',
         },
       ],
+      onFinish: () => {
+        recordTiming('llm.clarify', Date.now() - llmStartedAt);
+        closeLayoutData();
+      },
     });
 
-    return streamTextResult.toDataStreamResponse();
+    return streamTextResult.toDataStreamResponse({ data: layoutData, headers: responseHeaders });
   }
 
   let streamTextResult: StreamTextResult<Record<string, CoreTool<any, any>>, any>;
 
   if (!chosenAgent) {
+    const llmStartedAt = Date.now();
     streamTextResult = streamText({
       model,
       messages: truncatedMessages,
       system,
+      onFinish: () => {
+        recordTiming('llm.fallback', Date.now() - llmStartedAt);
+        closeLayoutData();
+      },
     });
   } else {
     let agentSystem = chosenAgent.systemPrompt;
@@ -226,31 +302,68 @@ BUZZ, the native token of The Hive, is strictly a memecoin and has no utility.`;
     }
 
     const gatedTools = gateToolsByMode(chosenAgent.tools, decision.mode);
-    const toolPlanItem = decision.toolPlan[0];
-    const forcedToolKey = toolPlanItem ? resolveToolKey(gatedTools, toolPlanItem.tool) : undefined;
+    const { keys: toolPlanKeys, hasMissing: toolPlanHasMissing } = resolveToolPlanKeys(
+      gatedTools,
+      decision.toolPlan,
+    );
+    const forcedToolKey = toolPlanKeys[0];
 
     agentSystem = `${agentSystem}\n\nROUTER MODE: ${decision.mode}\nROUTER UI: ${decision.ui}\nROUTER STOP: ${decision.stopCondition}\nROUTER TOOL PLAN: ${JSON.stringify(decision.toolPlan)}\n`;
 
+    const shouldSequenceToolPlan =
+      toolPlanKeys.length > 1 &&
+      !toolPlanHasMissing &&
+      decision.stopCondition !== 'when_first_yields_result_received';
+    const shouldPlanToolSteps =
+      toolPlanKeys.length > 0 &&
+      !toolPlanHasMissing &&
+      decision.stopCondition !== 'when_first_yields_result_received';
+    const executeStepCap = decision.mode === 'execute' ? 4 : 2;
+    const toolPlanCount = toolPlanKeys.length;
     const maxSteps = forcedToolKey
       ? decision.stopCondition === 'when_first_yields_result_received'
         ? 1
-        : 2
-      : undefined;
+        : shouldPlanToolSteps
+          ? Math.max(1, toolPlanCount)
+          : executeStepCap
+      : decision.mode === 'execute'
+        ? executeStepCap
+        : undefined;
 
+    const llmStartedAt = Date.now();
+    const llmTimingKey = `llm.agent.${decision.agent}`;
     streamTextResult = streamText({
       model,
       tools: gatedTools,
       messages: truncatedMessages,
       system: agentSystem,
+      onFinish: () => {
+        recordTiming(llmTimingKey, Date.now() - llmStartedAt);
+        closeLayoutData();
+      },
       ...(forcedToolKey
         ? {
             toolChoice: { type: 'tool', toolName: forcedToolKey },
             maxSteps: maxSteps,
-            ...(maxSteps && maxSteps > 1 ? { experimental_continueSteps: true } : {}),
+            ...(shouldSequenceToolPlan ? { experimental_continueSteps: true } : {}),
+            ...(shouldPlanToolSteps
+              ? {
+                  experimental_prepareStep: async ({ stepNumber }: { stepNumber: number }) => {
+                    const nextTool = toolPlanKeys[stepNumber - 1];
+                    if (!nextTool) {
+                      return { experimental_activeTools: [] };
+                    }
+                    return {
+                      toolChoice: { type: 'tool', toolName: nextTool },
+                      experimental_activeTools: [nextTool],
+                    };
+                  },
+                }
+              : {}),
           }
         : {}),
     });
   }
 
-  return streamTextResult.toDataStreamResponse();
+  return streamTextResult.toDataStreamResponse({ data: layoutData, headers: responseHeaders });
 };

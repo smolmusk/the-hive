@@ -29,9 +29,9 @@ export const routerFixtures: RouterFixture[] = [
       agent: 'lending',
       mode: 'explore',
       ui: 'cards',
-      toolPlan: [{ tool: SOLANA_LENDING_YIELDS_ACTION, args: { limit: 50 } }],
+      toolPlan: [{ tool: SOLANA_LENDING_YIELDS_ACTION, args: { limit: 3 } }],
       stopCondition: 'when_first_yields_result_received',
-      layout: ['tool'],
+      layout: ['card', 'summary'],
     },
   },
   {
@@ -47,9 +47,9 @@ export const routerFixtures: RouterFixture[] = [
       agent: 'staking',
       mode: 'explore',
       ui: 'cards_then_text',
-      toolPlan: [{ tool: SOLANA_LIQUID_STAKING_YIELDS_ACTION }],
+      toolPlan: [{ tool: SOLANA_LIQUID_STAKING_YIELDS_ACTION, args: { limit: 3 } }],
       stopCondition: 'after_tool_plan_complete',
-      layout: ['tool', 'text'],
+      layout: ['card', 'text'],
     },
   },
   {
@@ -67,7 +67,7 @@ export const routerFixtures: RouterFixture[] = [
       ui: 'text',
       toolPlan: [{ tool: SOLANA_LEND_ACTION, args: { tokenSymbol: 'USDC' } }],
       stopCondition: 'none',
-      layout: ['text'],
+      layout: ['tool', 'text'],
     },
   },
   {
@@ -111,7 +111,7 @@ export const routerFixtures: RouterFixture[] = [
         { tool: SOLANA_LEND_ACTION, args: { tokenSymbol: 'USDC' } },
       ],
       stopCondition: 'none',
-      layout: ['text'],
+      layout: ['tool', 'text'],
     },
   },
   {
@@ -176,7 +176,7 @@ export const routerFixtures: RouterFixture[] = [
       ui: 'text',
       toolPlan: [{ tool: SOLANA_LEND_ACTION, args: { tokenSymbol: 'USDC' } }],
       stopCondition: 'none',
-      layout: ['text'],
+      layout: ['tool', 'text'],
     },
   },
   {
@@ -192,7 +192,11 @@ export const routerFixtures: RouterFixture[] = [
       lastYield: null,
       lastAction: {
         tool: SOLANA_TRADE_ACTION,
-        args: { inputMint: 'So11111111111111111111111111111111111111112', outputMint: 'USDC', amount: 1 },
+        args: {
+          inputMint: 'So11111111111111111111111111111111111111112',
+          outputMint: 'USDC',
+          amount: 1,
+        },
         status: 'cancelled',
       },
       wallet: { hasWalletAddress: true },
@@ -219,7 +223,54 @@ export const routerFixtures: RouterFixture[] = [
         },
       ],
       stopCondition: 'none',
-      layout: ['text'],
+      layout: ['tool', 'text'],
+    },
+  },
+  {
+    name: 'Intent references failed swap action',
+    input: {
+      agent: 'none',
+      mode: 'explore',
+      ui: 'text',
+      toolPlan: [],
+      stopCondition: 'none',
+    },
+    context: {
+      lastYield: null,
+      lastAction: {
+        tool: SOLANA_TRADE_ACTION,
+        args: {
+          inputMint: 'So11111111111111111111111111111111111111112',
+          outputMint: 'USDC',
+          amount: 2,
+        },
+        status: 'failed',
+      },
+      wallet: { hasWalletAddress: true },
+      intent: {
+        goal: 'execute',
+        domain: 'trading',
+        queryType: 'retry',
+        confidence: 0.78,
+        references: { fromLastAction: true },
+      },
+    },
+    expected: {
+      agent: 'trading',
+      mode: 'execute',
+      ui: 'text',
+      toolPlan: [
+        {
+          tool: SOLANA_TRADE_ACTION,
+          args: {
+            inputMint: 'So11111111111111111111111111111111111111112',
+            outputMint: 'USDC',
+            amount: 2,
+          },
+        },
+      ],
+      stopCondition: 'none',
+      layout: ['tool', 'text'],
     },
   },
   {
@@ -258,7 +309,46 @@ export const routerFixtures: RouterFixture[] = [
         },
       ],
       stopCondition: 'none',
-      layout: ['text'],
+      layout: ['tool', 'text'],
+    },
+  },
+  {
+    name: 'Intent references failed transfer action',
+    input: {
+      agent: 'none',
+      mode: 'explore',
+      ui: 'text',
+      toolPlan: [],
+      stopCondition: 'none',
+    },
+    context: {
+      lastYield: null,
+      lastAction: {
+        tool: SOLANA_TRANSFER_NAME,
+        args: { to: '8x2dR8Mpzuz2YqyZyZjUbYWKSWesBo5jMx2Q9Y86udVk', amount: 0.25 },
+        status: 'failed',
+      },
+      wallet: { hasWalletAddress: true },
+      intent: {
+        goal: 'execute',
+        domain: 'wallet',
+        queryType: 'retry',
+        confidence: 0.77,
+        references: { fromLastAction: true },
+      },
+    },
+    expected: {
+      agent: 'wallet',
+      mode: 'execute',
+      ui: 'text',
+      toolPlan: [
+        {
+          tool: SOLANA_TRANSFER_NAME,
+          args: { to: '8x2dR8Mpzuz2YqyZyZjUbYWKSWesBo5jMx2Q9Y86udVk', amount: 0.25 },
+        },
+      ],
+      stopCondition: 'none',
+      layout: ['tool', 'text'],
     },
   },
   {
@@ -351,10 +441,13 @@ export const routerFixtures: RouterFixture[] = [
       mode: 'explore',
       ui: 'cards',
       toolPlan: [
-        { tool: SOLANA_LENDING_YIELDS_ACTION, args: { tokenSymbol: 'USDC', protocol: 'kamino-lend' } },
+        {
+          tool: SOLANA_LENDING_YIELDS_ACTION,
+          args: { tokenSymbol: 'USDC', protocol: 'kamino-lend', limit: 3 },
+        },
       ],
       stopCondition: 'when_first_yields_result_received',
-      layout: ['tool'],
+      layout: ['card', 'summary'],
     },
   },
   {
@@ -383,11 +476,11 @@ export const routerFixtures: RouterFixture[] = [
       toolPlan: [
         {
           tool: SOLANA_LENDING_YIELDS_ACTION,
-          args: { stablecoinOnly: true, timeHorizon: 'short', risk: 'low' },
+          args: { stablecoinOnly: true, timeHorizon: 'short', risk: 'low', limit: 3 },
         },
       ],
       stopCondition: 'when_first_yields_result_received',
-      layout: ['tool'],
+      layout: ['card', 'summary'],
     },
   },
   {
@@ -415,11 +508,83 @@ export const routerFixtures: RouterFixture[] = [
       toolPlan: [
         {
           tool: SOLANA_LIQUID_STAKING_YIELDS_ACTION,
-          args: { timeHorizon: 'medium', risk: 'high' },
+          args: { timeHorizon: 'medium', risk: 'high', limit: 3 },
         },
       ],
       stopCondition: 'when_first_yields_result_received',
-      layout: ['tool'],
+      layout: ['card', 'summary'],
+    },
+  },
+  {
+    name: 'Multi-tool plan preserves ordering',
+    input: {
+      agent: 'wallet',
+      mode: 'execute',
+      ui: 'text',
+      toolPlan: [
+        { tool: SOLANA_GET_WALLET_ADDRESS_ACTION },
+        { tool: SOLANA_TRANSFER_NAME, args: { amount: 1, recipient: 'DemoRecipient' } },
+      ],
+      stopCondition: 'none',
+    },
+    context: {
+      lastYield: null,
+      lastAction: null,
+      wallet: { hasWalletAddress: true },
+    },
+    expected: {
+      agent: 'wallet',
+      mode: 'execute',
+      ui: 'text',
+      toolPlan: [
+        { tool: SOLANA_GET_WALLET_ADDRESS_ACTION },
+        { tool: SOLANA_TRANSFER_NAME, args: { amount: 1, recipient: 'DemoRecipient' } },
+      ],
+      stopCondition: 'none',
+      layout: ['tool', 'text'],
+    },
+  },
+  {
+    name: 'Multi-tool plan preserves trade ordering',
+    input: {
+      agent: 'trading',
+      mode: 'execute',
+      ui: 'text',
+      toolPlan: [
+        { tool: SOLANA_GET_WALLET_ADDRESS_ACTION },
+        {
+          tool: SOLANA_TRADE_ACTION,
+          args: {
+            inputMint: 'So11111111111111111111111111111111111111112',
+            outputMint: 'USDC',
+            amount: 1,
+          },
+        },
+      ],
+      stopCondition: 'none',
+    },
+    context: {
+      lastYield: null,
+      lastAction: null,
+      wallet: { hasWalletAddress: true },
+    },
+    expected: {
+      agent: 'trading',
+      mode: 'execute',
+      ui: 'text',
+      toolPlan: [
+        { tool: SOLANA_GET_WALLET_ADDRESS_ACTION },
+        {
+          tool: SOLANA_TRADE_ACTION,
+          args: {
+            inputMint: 'So11111111111111111111111111111111111111112',
+            outputMint: 'USDC',
+            amount: 1,
+          },
+        },
+      ],
+      stopCondition: 'none',
+      layout: ['tool', 'text'],
     },
   },
 ];

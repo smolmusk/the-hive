@@ -1,3 +1,4 @@
-export const SOLANA_GET_LP_TOKENS_PROMPT = 
-`This function gets all of a given address's LP Tokens from Raydium.
-The function requires an address.`; 
+export const SOLANA_GET_LP_TOKENS_PROMPT = `Get all Raydium LP tokens for a wallet.
+
+Input:
+- address`;

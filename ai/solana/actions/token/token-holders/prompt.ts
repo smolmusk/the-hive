@@ -1,4 +1,5 @@
-export const SOLANA_TOKEN_HOLDERS_PROMPT = 
-`Gets the number of holders of a token given its mint address.
+export const SOLANA_TOKEN_HOLDERS_PROMPT = `Get the number of holders for a token.
 
-Threshold is an optional parameter that specificies how much of the token the holders must hold.`; 
+Inputs:
+- mint address
+- threshold (optional: minimum token amount held)`; 

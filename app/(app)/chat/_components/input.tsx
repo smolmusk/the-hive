@@ -70,7 +70,6 @@ const ChatInput: React.FC = () => {
   const hasMessages = (messages || []).length > 0;
   const placeholder = hasMessages ? 'Ask the hive anything...' : `Tip: ${tipPrompt}`;
   const userPrefs = memory?.userPrefs ?? {};
-  const stablecoinOnly = Boolean(userPrefs?.stablecoinOnly);
   const riskPref = userPrefs?.risk;
   const timeHorizonPref = userPrefs?.timeHorizon;
   const formatPref = (value?: string) => (value ? value[0]?.toUpperCase() + value.slice(1) : null);
@@ -100,21 +99,6 @@ const ChatInput: React.FC = () => {
           </PopoverTrigger>
           <PopoverContent align="start" className="w-72">
             <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm font-medium text-neutral-700 dark:text-neutral-200">
-                  Stablecoin only
-                </span>
-                <Button
-                  size="sm"
-                  variant={stablecoinOnly ? 'brandOutline' : 'outline'}
-                  className="h-7 px-3"
-                  onClick={() =>
-                    updateUserPrefs({ stablecoinOnly: stablecoinOnly ? undefined : true })
-                  }
-                >
-                  {stablecoinOnly ? 'On' : 'Off'}
-                </Button>
-              </div>
               <div className="flex flex-col gap-2">
                 <span className="text-sm font-medium text-neutral-700 dark:text-neutral-200">
                   Risk
@@ -168,7 +152,6 @@ const ChatInput: React.FC = () => {
             </div>
           </PopoverContent>
         </Popover>
-        {stablecoinOnly ? <Badge variant="brandOutline">Stablecoins only</Badge> : null}
         {riskLabel ? <Badge variant="secondary">Risk: {riskLabel}</Badge> : null}
         {timeHorizonLabel ? <Badge variant="secondary">Horizon: {timeHorizonLabel}</Badge> : null}
       </div>

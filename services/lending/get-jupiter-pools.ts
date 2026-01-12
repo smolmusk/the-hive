@@ -1,6 +1,10 @@
+import { capList } from '@/lib/cache-utils';
+
 const JUPITER_LEND_POOLS_URL = 'https://api.solana.fluid.io/v1/lending/tokens';
+
 const CACHE_TTL_MS = 2 * 60 * 1000;
 const MAX_STALE_MS = 60 * 60 * 1000;
+const MAX_POOL_ENTRIES = 2000;
 
 let cachedPools: JupiterPool[] | null = null;
 let cachedAt = 0;
@@ -126,9 +130,10 @@ async function fetchAndCache(): Promise<JupiterPool[]> {
     });
   }
 
-  cachedPools = pools;
+  const cappedPools = capList(pools, MAX_POOL_ENTRIES);
+  cachedPools = cappedPools;
   cachedAt = Date.now();
-  return pools;
+  return cappedPools;
 }
 
 async function refreshCache(forceRefresh = false) {

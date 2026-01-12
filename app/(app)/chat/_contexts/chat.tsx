@@ -45,7 +45,10 @@ interface ChatContextType {
   onSubmit: () => Promise<void>;
   isLoading: boolean;
   sendMessage: (message: string) => void;
-  sendInternalMessage: (message: string) => void;
+  sendInternalMessage: (
+    message: string,
+    options?: { route?: boolean; annotation?: Record<string, unknown> },
+  ) => void;
   addToolResult: <T>(toolCallId: string, result: ToolResult<T>) => void;
   isResponseLoading: boolean;
   model: Models;
@@ -356,8 +359,13 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     await sendMessageBase(message);
   };
 
-  const sendInternalMessage = async (message: string) => {
-    await sendMessageBase(message, [{ internal: true }]);
+  const sendInternalMessage = async (
+    message: string,
+    options?: { route?: boolean; annotation?: Record<string, unknown> },
+  ) => {
+    await sendMessageBase(message, [
+      { internal: true, route: options?.route === true, ...(options?.annotation ?? {}) },
+    ]);
   };
 
   const inputDisabledMessage = useMemo(() => {

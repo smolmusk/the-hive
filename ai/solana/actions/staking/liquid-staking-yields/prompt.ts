@@ -1,10 +1,11 @@
-export const SOLANA_LIQUID_STAKING_YIELDS_PROMPT = `Gets the best liquid staking yields on Solana in real time.
+export const SOLANA_LIQUID_STAKING_YIELDS_PROMPT = `Fetch the best liquid staking yields on Solana.
 
-Optional parameters:
-- tokenSymbol: filter by LST symbol (e.g., "JITOSOL", "MSOL")
-- protocol: filter by protocol slug (e.g., "jito-liquid-staking", "marinade-liquid-staking")
-- limit: max number of pools to return (default 3)
-- risk: user risk preference ("low", "medium", "high") for ranking guidance
-- timeHorizon: user time horizon ("short", "medium", "long") for ranking guidance
+Inputs:
+- tokenSymbol (optional LST symbol)
+- protocol (optional slug)
+- limit (default 3; set to 50 only when showAll is true)
+- showAll (boolean, only true when user explicitly asks for all pools)
+- risk (low|medium|high)
+- timeHorizon (short|medium|long)
 
-Call this tool when a user asks where the best place for them to stake their SOL is.`;
+Use when the user asks for the best place to stake SOL.`;

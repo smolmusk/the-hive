@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 import LoginButton from '@/app/(app)/_components/log-in-button';
 
@@ -48,6 +48,7 @@ const GetWalletAddress: React.FC<Props> = ({ tool, prevToolAgent }) => {
 const GetWalletAddressAction = ({ toolCallId }: { toolCallId: string }) => {
   const { setCurrentChain, walletAddresses } = useChain();
   const { addToolResult, isLoading } = useChat();
+  const hasSubmittedRef = useRef(false);
 
   // Set the current chain to Solana
   useEffect(() => {
@@ -60,15 +61,16 @@ const GetWalletAddressAction = ({ toolCallId }: { toolCallId: string }) => {
   // - user.wallet
   // - user.linkedAccounts
   useEffect(() => {
-    if (!isLoading && walletAddresses.solana) {
-      addToolResult(toolCallId, {
-        message: 'Solana Wallet connected',
-        body: {
-          address: walletAddresses.solana,
-        },
-      });
-    }
-  }, [walletAddresses.solana, isLoading, addToolResult, toolCallId]);
+    if (!walletAddresses.solana || hasSubmittedRef.current) return;
+    if (walletAddresses.solana.startsWith('0x')) return;
+    hasSubmittedRef.current = true;
+    addToolResult(toolCallId, {
+      message: 'Solana Wallet connected',
+      body: {
+        address: walletAddresses.solana,
+      },
+    });
+  }, [walletAddresses.solana, addToolResult, toolCallId]);
 
   const onComplete = (wallet: Wallet) => {
     // Only use the wallet if it's a Solana wallet (not starting with 0x)
@@ -91,7 +93,15 @@ const GetWalletAddressAction = ({ toolCallId }: { toolCallId: string }) => {
   };
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex flex-col items-center gap-3 text-center">
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
+          Connect your Solana wallet to continue.
+        </p>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          We only use it to fetch balances and sign transactions you approve.
+        </p>
+      </div>
       <LoginButton onComplete={onComplete} />
     </div>
   );

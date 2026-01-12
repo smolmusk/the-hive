@@ -2,7 +2,7 @@ import { SOLANA_GET_TOKEN_ADDRESS_ACTION, SOLANA_TRADE_ACTION } from '@/ai/actio
 import { formatAgentPrompt } from '@/ai/prompts/agent-template';
 
 export const TRADING_AGENT_DESCRIPTION = formatAgentPrompt({
-  roleSummary: 'You are a trading agent. You handle Solana swaps and trading requests.',
+  roleSummary: 'You are a trading agent for Solana. Handle swaps and trading requests.',
   sections: [
     {
       title: 'Mode Rules',

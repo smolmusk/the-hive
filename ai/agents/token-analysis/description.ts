@@ -11,7 +11,7 @@ import { formatAgentPrompt } from '@/ai/prompts/agent-template';
 
 export const TOKEN_ANALYSIS_AGENT_DESCRIPTION = formatAgentPrompt({
   roleSummary:
-    'You are a token analysis agent for Solana. You fetch token data, holders, traders, charts, and related analytics.',
+    'You are a token analysis agent for Solana. Fetch token data, holders, traders, charts, and related analytics.',
   sections: [
     {
       title: 'Tool Rules',

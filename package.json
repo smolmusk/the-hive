@@ -18,6 +18,8 @@
     "validate:router": "ts-node -P tsconfig.scripts.json -r tsconfig-paths/register scripts/validate-router.ts",
     "validate:intent": "ts-node -P tsconfig.scripts.json -r tsconfig-paths/register scripts/validate-intent.ts",
     "validate:pending-actions": "ts-node -P tsconfig.scripts.json -r tsconfig-paths/register scripts/validate-pending-actions.ts",
+    "validate:suggestions-prompt": "ts-node -P tsconfig.scripts.json -r tsconfig-paths/register scripts/validate-suggestions-prompt.ts",
+    "validate:message-layout": "ts-node -P tsconfig.scripts.json -r tsconfig-paths/register scripts/validate-message-layout.ts",
     "validate:prompts": "ts-node -P tsconfig.scripts.json -r tsconfig-paths/register scripts/validate-prompts.ts"
   },
   "dependencies": {

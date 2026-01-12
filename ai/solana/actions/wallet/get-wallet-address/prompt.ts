@@ -1,5 +1,3 @@
-export const SOLANA_GET_WALLET_ADDRESS_PROMPT = `Ask the user to connect their Solana wallet to the agent to get their wallet address.
+export const SOLANA_GET_WALLET_ADDRESS_PROMPT = `Prompt the user to connect their Solana wallet.
 
-This action does not require any parameters. The user will supply their wallet address to the agent.
-
-Call this tool before any other tools that require a wallet address.`; 
+No inputs required. Use this only when a wallet address is required by the flow.`; 
